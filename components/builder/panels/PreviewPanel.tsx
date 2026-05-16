@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpRight, ChevronLeft, RefreshCw } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, Monitor, RefreshCw, Smartphone, Tablet } from "lucide-react";
 import { PhoneFrame } from "@/components/builder/PhoneFrame";
+import type { MockProject } from "@/lib/mock/projects";
 
 const KANBAN_COLUMNS = [
   { column: "Backlog", items: ["Auth screens", "Billing table", "Empty states"] },
@@ -11,19 +12,39 @@ const KANBAN_COLUMNS = [
   { column: "Done", items: ["Landing page", "Pricing page"] }
 ] as const;
 
-export function PreviewPanel() {
-  const [previewMode, setPreviewMode] = useState<"web" | "mobile">("web");
+type Viewport = "desktop" | "tablet" | "mobile";
+
+const VIEWPORT_WIDTHS: Record<Viewport, string> = {
+  desktop: "100%",
+  tablet: "768px",
+  mobile: "390px"
+};
+
+const VIEWPORT_OPTIONS = [
+  { id: "desktop", label: "Desktop", icon: Monitor },
+  { id: "tablet", label: "Tablet", icon: Tablet },
+  { id: "mobile", label: "Mobile", icon: Smartphone }
+] as const satisfies Array<{ id: Viewport; label: string; icon: typeof Monitor }>;
+
+export function PreviewPanel({ project }: { project: MockProject }) {
+  const [viewport, setViewport] = useState<Viewport>("desktop");
+
+  if (project.type === "mobile") {
+    return <MobilePreview />;
+  }
 
   return (
     <div>
       <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
-        {(["web", "mobile"] as const).map((mode) => (
-          <button aria-label={`${mode === "web" ? "Web" : "Mobile"} preview`} className={`shared-tab ${previewMode === mode ? "active" : ""}`} key={mode} onClick={() => setPreviewMode(mode)} type="button">
-            {mode === "web" ? "Web" : "Mobile"}
+        {VIEWPORT_OPTIONS.map(({ id, label, icon: Icon }) => (
+          <button aria-label={`${label} preview`} className={`shared-tab ${viewport === id ? "active" : ""}`} key={id} onClick={() => setViewport(id)} type="button">
+            <Icon size={15} /> {label}
           </button>
         ))}
       </div>
-      {previewMode === "web" ? <WebPreview /> : <MobilePreview />}
+      <div className="mx-auto transition-all" style={{ maxWidth: VIEWPORT_WIDTHS[viewport] }}>
+        <WebPreview />
+      </div>
     </div>
   );
 }

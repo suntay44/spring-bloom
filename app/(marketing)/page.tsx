@@ -4,6 +4,7 @@ import { Navbar } from "@/components/marketing/Navbar";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { HeroPromptSection } from "@/components/marketing/HeroPromptSection";
 import { Footer } from "@/components/shared/Footer";
+import { Badge } from "@/components/ui/badge";
 import { DEVELOPER_FEATURES, MARKETING_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
 
 const HERO_STATS = [
@@ -62,7 +63,7 @@ export default function MarketingPage() {
           <div className="mt-8 grid-3">
             {WORKFLOW_STEPS.map(({ step, title, body }) => (
               <article className="card feature-card" key={title}>
-                <span className="pill">{step}</span>
+                <Badge variant="secondary">{step}</Badge>
                 <h3 className="mt-5 text-2xl font-semibold">{title}</h3>
                 <p className="mt-3 text-slate-300">{body}</p>
               </article>

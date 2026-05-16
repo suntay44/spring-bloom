@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Github } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useMockAuth } from "@/context/MockAuthContext";
 
 export default function SignupPage() {
@@ -23,9 +24,9 @@ export default function SignupPage() {
         <label className="field"><span>Full name</span><input placeholder="Christian Suntay" /></label>
         <label className="field"><span>Email</span><input placeholder="you@example.com" type="email" /></label>
         <label className="field"><span>Password</span><input placeholder="Password" type="password" /></label>
-        <button className="button blue mt-2 w-full" disabled={loading} type="submit">{loading ? "Creating account..." : "Create account"} <ArrowRight size={17} /></button>
+        <Button className="mt-2 w-full" disabled={loading} type="submit">{loading ? "Creating account..." : "Create account"} <ArrowRight size={17} /></Button>
       </form>
-      <button className="button secondary mt-3 w-full" disabled={loading} onClick={() => void handleSignIn()} type="button"><Github size={17} /> {loading ? "Creating account..." : "Continue with GitHub"}</button>
+      <Button className="mt-3 w-full" disabled={loading} onClick={() => void handleSignIn()} type="button" variant="outline"><Github size={17} /> {loading ? "Creating account..." : "Continue with GitHub"}</Button>
       <p className="mt-6 text-center text-sm text-slate-300">Already have an account? <Link className="font-semibold text-purple-300" href="/login">Log in</Link></p>
     </div>
   );

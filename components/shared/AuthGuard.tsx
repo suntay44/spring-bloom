@@ -20,9 +20,10 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
   if (!isAuthenticated) {
     return (
-      <div className="fixed inset-0 bg-zinc-950">
+      <>
+        <div className="fixed inset-0 bg-zinc-950" aria-hidden="true" />
         <AuthModal onClose={() => router.push("/")} defaultTab="login" />
-      </div>
+      </>
     );
   }
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
@@ -24,7 +25,7 @@ export default function ForgotPasswordPage() {
       ) : (
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <input className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="you@example.com" type="email" />
-          <button className="button blue w-full" disabled={loading} type="submit">{loading ? "Sending..." : "Send reset link"}</button>
+          <Button className="w-full" disabled={loading} type="submit">{loading ? "Sending..." : "Send reset link"}</Button>
         </form>
       )}
       <p className="mt-5 text-sm font-bold text-slate-500"><Link className="text-purple-400 hover:underline" href="/login">Back to sign in</Link></p>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { Button } from "@/components/ui/button";
 import { pricingPlans } from "@/lib/mock/data";
 
 const CREDIT_EXAMPLES = [
@@ -29,7 +30,7 @@ export function PricingSection({ expanded = false }: { expanded?: boolean }) {
             <h2>Credit pricing that stays visible.</h2>
             <p className="section-lede">Credits map to real work: planning, building, review, security, analytics, and deploy assistance.</p>
           </div>
-          {expanded ? <button className="button blue" onClick={() => openPlan("Pro")} type="button">Start with selected plan</button> : <Link className="button secondary" href="/pricing">Compare plans</Link>}
+          {expanded ? <Button onClick={() => openPlan("Pro")} type="button">Start with selected plan</Button> : <Button render={<Link href="/pricing" />} variant="outline">Compare plans</Button>}
         </div>
         <div className="grid-4">
           {pricingPlans.map((plan) => (
@@ -40,7 +41,7 @@ export function PricingSection({ expanded = false }: { expanded?: boolean }) {
                 <p className="flex items-center gap-2"><CheckCircle2 color="var(--green)" size={17} /> {plan.projects}</p>
                 <p className="flex items-center gap-2"><CheckCircle2 color="var(--green)" size={17} /> Review and security tools</p>
               </div>
-              <button className={`button w-full ${plan.featured ? "blue" : "secondary"}`} onClick={() => openPlan(plan.name)} type="button">{plan.cta}</button>
+              <Button className="w-full" onClick={() => openPlan(plan.name)} type="button" variant={plan.featured ? "default" : "outline"}>{plan.cta}</Button>
             </article>
           ))}
         </div>
