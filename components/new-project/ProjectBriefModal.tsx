@@ -17,6 +17,12 @@ type ProjectBriefModalProps = {
   step: BriefStep;
 };
 
+const BACKEND_OPTIONS = [
+  { id: "managed", label: "Managed Supabase - we handle it", defaultChecked: true },
+  { id: "byo", label: "Connect my own Supabase", defaultChecked: false },
+  { id: "later", label: "Decide later - frontend/mock data first", defaultChecked: false }
+] as const;
+
 export function ProjectBriefModal({ appType, model, prompt, projectId = "healthtech-proto", setOpen, setStep, step }: ProjectBriefModalProps) {
   const next = () => setStep(step < 6 ? ((step + 1) as BriefStep) : step);
   const back = () => setStep(step > 1 ? ((step - 1) as BriefStep) : step);
@@ -50,9 +56,9 @@ export function ProjectBriefModal({ appType, model, prompt, projectId = "healtht
             <div>
               <h3 className="text-xl font-semibold">Backend and data</h3>
               <div className="mt-5 grid gap-3">
-                {["Managed Supabase — we handle it", "Connect my own Supabase", "Decide later — frontend/mock data first"].map((option, index) => (
-                  <label className="card flex items-center gap-3 p-4 font-bold" key={option}>
-                    <input defaultChecked={index === 0} name="backend" type="radio" /> {option}
+                {BACKEND_OPTIONS.map((option) => (
+                  <label className="card flex items-center gap-3 p-4 font-bold" key={option.id}>
+                    <input defaultChecked={option.defaultChecked} name="backend" type="radio" /> {option.label}
                   </label>
                 ))}
               </div>
@@ -72,6 +78,7 @@ export function ProjectBriefModal({ appType, model, prompt, projectId = "healtht
 }
 
 function PrdReview({ appType, model, prompt }: { appType: string; model: string; prompt: string }) {
+  const derivedName = prompt.split(".")[0]?.trim().slice(0, 50) || "My App";
   const summary = [
     { label: "Main flow", value: "Sign up → workspace → tasks → board" },
     { label: "Backend", value: "Managed Supabase" },
@@ -82,7 +89,7 @@ function PrdReview({ appType, model, prompt }: { appType: string; model: string;
     <div className="space-y-5">
       <div className="rounded-lg bg-black p-5 text-white">
         <p className="text-sm font-semibold text-purple-200">{appType} · {model}</p>
-        <h3 className="mt-2 text-3xl font-semibold">Task Manager Pro</h3>
+        <h3 className="mt-2 text-3xl font-semibold">{derivedName}</h3>
         <p className="mt-3 text-slate-300">{prompt}</p>
       </div>
       <div className="grid-3">

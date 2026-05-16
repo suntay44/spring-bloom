@@ -11,6 +11,12 @@ type ChatPanelProps = {
   onToolsOpen: () => void;
 };
 
+const QUICK_ACTIONS = [
+  { label: "Run review", action: "tab", tab: "Review" as const },
+  { label: "Add billing", action: "tools" },
+  { label: "Connect Supabase", action: "tab", tab: "Security" as const }
+] as const;
+
 export function ChatPanel({ messages, onTabChange, onToolsOpen }: ChatPanelProps) {
   return (
     <aside className="conversation-pane">
@@ -18,9 +24,11 @@ export function ChatPanel({ messages, onTabChange, onToolsOpen }: ChatPanelProps
         <div className="build-stamp"><span>May 15 at 2:45 PM</span><div className="mini-preview">PRD approved</div></div>
         {messages.map((message) => <MessageItem key={message.id} message={message} />)}
         <div className="quick-actions">
-          <button onClick={() => onTabChange("Review")} type="button">Run review</button>
-          <button onClick={onToolsOpen} type="button">Add billing</button>
-          <button onClick={() => onTabChange("Security")} type="button">Connect Supabase</button>
+          {QUICK_ACTIONS.map((item) => (
+            <button className="chip-btn" key={item.label} onClick={() => item.action === "tab" ? onTabChange(item.tab) : onToolsOpen()} type="button">
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
       <div className="agent-composer">

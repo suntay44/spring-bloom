@@ -324,6 +324,12 @@ button {
   gap: 18px;
 }
 
+.project-table-row {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr 1fr 44px;
+  gap: 1rem;
+}
+
 .feature-card,
 .price-card,
 .project-card {
@@ -497,9 +503,6 @@ button {
 }
 
 .chat-header-tools {
-  position: absolute;
-  top: 14px;
-  left: calc(max(360px, 30vw) - 84px);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -542,9 +545,7 @@ button {
 }
 
 .builder-top-tools {
-  position: absolute;
-  top: 14px;
-  left: calc(max(360px, 30vw) + 14px);
+  display: flex;
 }
 
 .builder-actions {
@@ -713,14 +714,6 @@ button {
 
 .builder-page.sidebar-collapsed .builder-workspace {
   grid-template-columns: minmax(0, 1fr);
-}
-
-.builder-page.sidebar-collapsed .chat-header-tools {
-  left: 322px;
-}
-
-.builder-page.sidebar-collapsed .builder-top-tools {
-  left: 408px;
 }
 
 .builder-page.sidebar-collapsed .preview-browser {
@@ -1629,7 +1622,6 @@ button {
   }
 
   .builder-top-tools {
-    left: calc(max(320px, 36vw) + 14px);
     justify-self: end;
   }
 
@@ -1643,18 +1635,6 @@ button {
 
   .builder-page.sidebar-collapsed .builder-workspace {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .chat-header-tools {
-    left: calc(max(320px, 36vw) - 84px);
-  }
-
-  .builder-page.sidebar-collapsed .chat-header-tools {
-    left: 280px;
-  }
-
-  .builder-page.sidebar-collapsed .builder-top-tools {
-    left: 366px;
   }
 
   .sample-hero {
@@ -1728,6 +1708,7 @@ button {
 .builder-toolbar-cluster {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   min-width: 0;
 }
@@ -1848,6 +1829,32 @@ button {
     min-height: auto;
   }
 
+}
+
+@media (max-width: 768px) {
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .auth-shell,
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-panel,
+  .sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 620px) {

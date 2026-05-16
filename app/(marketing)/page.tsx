@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { ArrowRight, Bot, CheckCircle2, Play } from "lucide-react";
+import { Bot, CheckCircle2 } from "lucide-react";
+import { HeroCTAButtons } from "@/components/marketing/HeroCTAButtons";
 import { Navbar } from "@/components/marketing/Navbar";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { HeroPromptSection } from "@/components/marketing/HeroPromptSection";
@@ -34,14 +34,7 @@ export default function MarketingPage() {
             Describe what you want. Confirm the project brief. Wild Cupcake generates web and mobile apps with real
             code, review, security, analytics, and credit receipts.
           </p>
-          <div className="mb-10 flex flex-wrap justify-center gap-3">
-            <Link className="button" href="/signup">
-              Start Building <ArrowRight size={17} />
-            </Link>
-            <Link className="button secondary" href="#workflow">
-              <Play size={17} /> Watch flow
-            </Link>
-          </div>
+          <HeroCTAButtons />
           <div className="mx-auto mb-6 flex flex-wrap justify-center gap-8 text-sm font-bold text-slate-400">
             <span><strong className="text-white">{MOCK_STATS.builders}</strong> builders</span>
             <span><strong className="text-white">{MOCK_STATS.appsBuilt}</strong> apps built</span>
