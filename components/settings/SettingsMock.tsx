@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { TabBar } from "@/components/shared/TabBar";
 import { AccountSection } from "@/components/settings/sections/AccountSection";
 import { AnalyticsSection } from "@/components/settings/sections/AnalyticsSection";
@@ -12,6 +12,15 @@ import { SecuritySection } from "@/components/settings/sections/SecuritySection"
 const tabs = ["Account", "Credits & Billing", "Database", "Security", "Analytics", "Danger Zone"] as const;
 type SettingsTab = (typeof tabs)[number];
 
+const SETTINGS_PANELS: Record<SettingsTab, ReactNode> = {
+  Account: <AccountSection />,
+  "Credits & Billing": <BillingSection />,
+  Database: <DatabaseSection />,
+  Security: <SecuritySection />,
+  Analytics: <AnalyticsSection />,
+  "Danger Zone": <DangerSection />
+};
+
 export function SettingsMock() {
   const [tab, setTab] = useState<SettingsTab>("Credits & Billing");
 
@@ -21,12 +30,7 @@ export function SettingsMock() {
       <p className="mt-2 text-slate-300">Mock settings and billing surfaces before backend wiring.</p>
       <TabBar tabs={tabs} value={tab} onChange={setTab} />
       <div className="mt-6">
-        {tab === "Account" ? <AccountSection /> : null}
-        {tab === "Credits & Billing" ? <BillingSection /> : null}
-        {tab === "Database" ? <DatabaseSection /> : null}
-        {tab === "Security" ? <SecuritySection /> : null}
-        {tab === "Analytics" ? <AnalyticsSection /> : null}
-        {tab === "Danger Zone" ? <DangerSection /> : null}
+        {SETTINGS_PANELS[tab]}
       </div>
     </section>
   );

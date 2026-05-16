@@ -14,7 +14,9 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     setChecked(true);
   }, []);
 
-  if (!checked) return null;
+  if (!checked) {
+    return <div className="fixed inset-0 bg-zinc-950" aria-hidden="true" />;
+  }
 
   if (!isAuthenticated) {
     return (

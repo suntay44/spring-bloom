@@ -19,10 +19,10 @@ const TOOL_ITEMS = [
   { label: "Cloud", icon: Cloud, pinned: true, tab: "Security" },
   { label: "Code", icon: Code2, pinned: true, tab: "Diff" },
   { label: "Files", icon: FileText, pinned: true, tab: "Files" },
-  { label: "Payments", icon: CreditCard, pinned: false },
+  { label: "Payments", icon: CreditCard, pinned: false, active: true },
   { label: "Security", icon: ShieldCheck, pinned: false, tab: "Security" },
   { label: "SEO & AI search", icon: Search, pinned: false }
-] satisfies Array<{ label: string; icon: ComponentType<{ size?: number }>; pinned: boolean; tab?: BuilderTab }>;
+] satisfies Array<{ label: string; icon: ComponentType<{ size?: number }>; pinned: boolean; tab?: BuilderTab; active?: boolean }>;
 
 export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void }) {
   return (
@@ -30,7 +30,7 @@ export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void })
       {TOOL_ITEMS.map((item) => {
         const Icon = item.icon;
         return (
-          <button className={item.label === "Payments" ? "active" : ""} key={item.label} onClick={() => item.tab ? setTab(item.tab) : undefined} type="button">
+          <button className={item.active ? "active" : ""} key={item.label} onClick={() => item.tab ? setTab(item.tab) : undefined} type="button">
             <Icon size={16} />
             <span>{item.label}</span>
             <Pin size={14} />

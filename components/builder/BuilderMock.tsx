@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowUpRight, BarChart3, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, Laptop, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, Sparkles, Upload } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ArrowUpRight, BarChart3, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, Laptop, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, ShieldCheck, Sparkles, Upload, type LucideIcon } from "lucide-react";
 import { ChatPanel } from "@/components/builder/ChatPanel";
 import { ProjectMenu, MoreToolsMenu, type BuilderTab } from "@/components/builder/ProjectMenu";
 import { AnalyticsPanel } from "@/components/builder/panels/AnalyticsPanel";
@@ -13,7 +13,25 @@ import { MOCK_MESSAGES } from "@/lib/mock/messages";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
 import { MOCK_SECURITY_RUN } from "@/lib/mock/security";
 
-const visibleToolbarTabs = ["Preview", "Files", "Diff", "Security", "Analytics"] as const;
+const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics"] as const;
+
+const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
+  Preview: Globe2,
+  Files: FileText,
+  Diff: Code2,
+  Review: ShieldCheck,
+  Security: Cloud,
+  Analytics: BarChart3
+};
+
+const TAB_PANELS: Record<BuilderTab, ReactNode> = {
+  Preview: <PreviewPanel />,
+  Files: <FilesPanel />,
+  Diff: <DiffPanel />,
+  Review: <FindingsPanel title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
+  Security: <FindingsPanel title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
+  Analytics: <AnalyticsPanel />
+};
 
 export function BuilderMock() {
   const [tab, setTab] = useState<BuilderTab>("Preview");
@@ -40,16 +58,15 @@ export function BuilderMock() {
           </div>
 
           <nav className="builder-top-tools" aria-label="Builder tools">
-            {visibleToolbarTabs.map((item) => (
-              <button className={`tool-tab ${item === tab ? "active" : ""}`} key={item} onClick={() => setTab(item)} type="button">
-                {item === "Preview" ? <Globe2 size={16} /> : null}
-                {item === "Files" ? <FileText size={16} /> : null}
-                {item === "Diff" ? <Code2 size={16} /> : null}
-                {item === "Security" ? <Cloud size={16} /> : null}
-                {item === "Analytics" ? <BarChart3 size={16} /> : null}
-                <span>{item}</span>
-              </button>
-            ))}
+            {visibleToolbarTabs.map((item) => {
+              const Icon = TAB_ICONS[item];
+              return (
+                <button aria-label={item} className={`tool-tab ${item === tab ? "active" : ""}`} key={item} onClick={() => setTab(item)} title={item} type="button">
+                  <Icon size={16} />
+                  <span>{item}</span>
+                </button>
+              );
+            })}
             <div className="tools-menu-wrap">
               <button aria-label="More tools" className="tool-btn" onClick={() => setToolsOpen((value) => !value)} title="More tools" type="button"><MoreHorizontal size={17} /></button>
               {toolsOpen ? <MoreToolsMenu setTab={setTab} /> : null}
@@ -77,12 +94,7 @@ export function BuilderMock() {
         {!sidebarCollapsed ? <ChatPanel messages={MOCK_MESSAGES} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} /> : null}
         <section className="preview-pane">
           <div className="preview-browser">
-            {tab === "Preview" ? <PreviewPanel /> : null}
-            {tab === "Files" ? <FilesPanel /> : null}
-            {tab === "Diff" ? <DiffPanel /> : null}
-            {tab === "Review" ? <FindingsPanel title="Code Review" items={MOCK_REVIEW_RUN.findings} /> : null}
-            {tab === "Security" ? <FindingsPanel title="Security Scan" items={MOCK_SECURITY_RUN.findings} /> : null}
-            {tab === "Analytics" ? <AnalyticsPanel /> : null}
+            {TAB_PANELS[tab]}
           </div>
         </section>
       </main>
