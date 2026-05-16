@@ -4,868 +4,500 @@
 > After each phase, run `npm run typecheck` and verify the dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Context**: We are in the UI-first gate. All data is mock/placeholder — do NOT wire real APIs yet.
-> Reference `PLAN.md` for design decisions and color tokens.
+> **Context**: UI-first gate — final frontend branch before backend work begins.
+> All data remains mock/placeholder. Do NOT wire real APIs.
 >
-> **Status**: Phases 1–13 complete. Phases 14–21 are the active work.
+> **Status**: Phases A–E complete. These phases are the final frontend work.
+> **Order**: F → G → J → H → I
 
 ---
 
-## ── PHASE 14 ── MockAuthContext — Simulated Auth State
-
-**Goal**: Give the entire app a single source of truth for "is this user logged in?" using client-side context. No real auth. Defaults to `false` (logged out). Clicking any sign-in action sets it to `true` and navigates to `/new`. Clicking "Sign out" sets it back to `false` and navigates to `/`.
+## ── PHASE F ── Code Review Bug Fixes
 
 ---
 
-### 14.1 — Create `lib/mock/auth.ts`
+### F.1 — Fix `HeroCTAButtons` hard navigation
 
-```ts
-// lib/mock/auth.ts
-// Simulated auth state shape — matches what real Supabase session will look like.
-import { MOCK_USER } from "@/lib/mock/user";
+**Problem**: Uses `window.location.href = "/new"` — triggers a full browser reload. Every other navigation uses `router.push()`.
 
-export type MockAuthState =
-  | { status: "unauthenticated" }
-  | { status: "authenticated"; user: typeof MOCK_USER };
-
-export const INITIAL_AUTH_STATE: MockAuthState = { status: "unauthenticated" };
-```
-
-- [x] Create `lib/mock/auth.ts` with the content above.
+- [x] In `components/marketing/HeroCTAButtons.tsx`:
+  - Add `import { useRouter } from "next/navigation"`.
+  - Add `const router = useRouter()` inside the component.
+  - Replace `window.location.href = "/new"` with `router.push("/new")`.
 
 ---
 
-### 14.2 — Create `context/MockAuthContext.tsx`
+### F.2 — Merge duplicate `@media (max-width: 768px)` blocks in `globals.css`
 
-```tsx
-"use client";
+**Problem**: Two separate `768px` blocks exist — one added in Phase C (line ~1834), one pre-existing (line ~1910) for `.builder-chrome`. Same breakpoint, two blocks.
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { MOCK_USER } from "@/lib/mock/user";
-import type { MockAuthState } from "@/lib/mock/auth";
-import { INITIAL_AUTH_STATE } from "@/lib/mock/auth";
-
-interface MockAuthContextValue {
-  auth: MockAuthState;
-  signIn: () => void;   // sets authenticated + navigates to /new
-  signOut: () => void;  // sets unauthenticated + navigates to /
-  isAuthenticated: boolean;
-}
-
-const MockAuthContext = createContext<MockAuthContextValue | null>(null);
-
-export function MockAuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<MockAuthState>(INITIAL_AUTH_STATE);
-  const router = useRouter();
-
-  const signIn = useCallback(() => {
-    setAuth({ status: "authenticated", user: MOCK_USER });
-    router.push("/new");
-  }, [router]);
-
-  const signOut = useCallback(() => {
-    setAuth(INITIAL_AUTH_STATE);
-    router.push("/");
-  }, [router]);
-
-  return (
-    <MockAuthContext.Provider
-      value={{ auth, signIn, signOut, isAuthenticated: auth.status === "authenticated" }}
-    >
-      {children}
-    </MockAuthContext.Provider>
-  );
-}
-
-export function useMockAuth(): MockAuthContextValue {
-  const ctx = useContext(MockAuthContext);
-  if (!ctx) throw new Error("useMockAuth must be used within MockAuthProvider");
-  return ctx;
-}
-```
-
-- [x] Create `context/MockAuthContext.tsx` with the content above.
+- [x] In `app/globals.css`:
+  - Find both `@media (max-width: 768px)` blocks.
+  - Move all rules from the second block into the first.
+  - Delete the now-empty second block.
+  - Verify: exactly one `@media (max-width: 768px)` block remains.
 
 ---
 
-### 14.3 — Wrap `app/layout.tsx` with `MockAuthProvider`
+### F.3 — Fix `TAB_PANELS` reconciliation for `FindingsPanel`
 
-In `app/layout.tsx`:
+**Problem**: `Review` and `Security` both render `<FindingsPanel>` at the same tree position. React reconciles instead of remounting — internal state (scroll, expanded rows) persists across tab switches.
 
-- [x] Add `import { MockAuthProvider } from "@/context/MockAuthContext"`.
-- [x] Wrap `{children}` with `<MockAuthProvider>{children}</MockAuthProvider>`.
-- [x] Keep the `Inter` font variable and `suppressHydrationWarning` that are already there — do not remove them.
-
----
-
-### 14.4 — Update auth pages to call `signIn` instead of `href="/home"`
-
-**`app/(auth)/login/page.tsx`**:
-- [x] Add `"use client"` directive (the page must be a client component because it calls `useMockAuth`).
-- [x] Import `useMockAuth` from `@/context/MockAuthContext`.
-- [x] Replace the "Sign in" `<Link href="/home">` with a `<button>` that calls `signIn()`.
-- [x] Replace the "Continue with GitHub" `<Link href="/home">` with a `<button>` that calls `signIn()`.
-- [x] Keep all existing styling classes identical — only change the element type and wire the `onClick`.
-
-**`app/(auth)/signup/page.tsx`**:
-- [x] Same changes as login: add `"use client"`, import `useMockAuth`, replace both `<Link href="/home">` elements with `<button onClick={signIn}>`.
+- [x] In `components/builder/BuilderMock.tsx`:
+  - Change `TAB_PANELS` from `Record<BuilderTab, ReactNode>` to `Record<BuilderTab, () => ReactNode>`:
+    ```tsx
+    const TAB_PANELS: Record<BuilderTab, () => React.ReactNode> = {
+      Preview: () => <PreviewPanel project={project} />,
+      Files: () => <FilesPanel />,
+      Diff: () => <DiffPanel />,
+      Review: () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
+      Security: () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
+      Analytics: () => <AnalyticsPanel />,
+    };
+    ```
+  - Update render site: `{TAB_PANELS[tab]()}`.
+  - Run `npm run typecheck` — zero errors.
 
 ---
 
-## ── PHASE 15 ── AuthModal — Login Popup for Unauthenticated CTAs
+## ── PHASE G ── Project Type Awareness in Builder
 
-**Goal**: When an unauthenticated visitor clicks any CTA that requires an account (send button on marketing prompt card, pricing plan CTAs, any `/dashboard` or `/new` or `/settings` direct navigation), show a modal overlay instead of hard-redirecting to `/login`. The modal contains the same form as the login page. Closing it returns to the marketing page.
+**Background**: `MOCK_PROJECTS` already has `type: "mobile" | "fullstack" | "landing"` and `framework: "expo" | "nextjs" | "static"`. The builder must use this data to drive preview behavior.
+
+- `mobile` → phone frame only. No web preview tab.
+- `fullstack` / `landing` → viewport toggle: Desktop / Tablet / Mobile (width resize, not platform switch).
 
 ---
 
-### 15.1 — Create `components/auth/AuthModal.tsx`
+### G.1 — Pass project into `BuilderMock` from the page
 
-```tsx
-"use client";
+**Problem**: `app/(builder)/builder/[projectId]/page.tsx` doesn't read `params.projectId` or look up the project. `BuilderMock` has no project context.
 
-import { useEffect } from "react";
-import { X, Github } from "lucide-react";
-import { useMockAuth } from "@/context/MockAuthContext";
+- [x] In `app/(builder)/builder/[projectId]/page.tsx`:
+  ```tsx
+  import { MOCK_PROJECTS } from "@/lib/mock/projects";
+  import { BuilderMock } from "@/components/builder/BuilderMock";
 
-interface AuthModalProps {
-  onClose: () => void;
-  defaultTab?: "login" | "signup";
-  selectedPlan?: string;
-}
-
-export function AuthModal({ onClose, defaultTab = "login", selectedPlan }: AuthModalProps) {
-  const { signIn } = useMockAuth();
-
-  // Close on Escape key
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+  export default function BuilderPage({ params }: { params: { projectId: string } }) {
+    const project = MOCK_PROJECTS.find((p) => p.id === params.projectId);
+    if (!project) {
+      return <div className="grid h-screen place-items-center text-slate-500">Project not found</div>;
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  // Scroll lock
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
-  }, []);
-
-  return (
-    <div
-      aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-      role="dialog"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="relative w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-950 p-8 shadow-2xl">
-        <button
-          aria-label="Close"
-          className="absolute right-4 top-4 icon-btn"
-          onClick={onClose}
-          type="button"
-        >
-          <X size={18} />
-        </button>
-
-        <h2 className="text-2xl font-semibold">
-          {defaultTab === "signup" ? "Create your account" : "Welcome back"}
-        </h2>
-        <p className="mt-1 text-sm font-bold text-slate-500">
-          {defaultTab === "signup"
-            ? "Sign up to start building."
-            : "Sign in to continue to Wild Cupcake."}
-        </p>
-
-        {selectedPlan && (
-          <div className="mb-5 mt-4 flex items-center justify-center">
-            <span className="pill">Selected: <strong>{selectedPlan} plan</strong></span>
-          </div>
-        )}
-
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={(e) => { e.preventDefault(); signIn(); }}
-        >
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold" htmlFor="modal-email">Email</label>
-            <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              id="modal-email"
-              placeholder="you@example.com"
-              type="email"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold" htmlFor="modal-password">Password</label>
-            <input
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              id="modal-password"
-              placeholder="••••••••"
-              type="password"
-            />
-          </div>
-          <button className="button blue w-full" type="submit">
-            {defaultTab === "signup" ? "Create account" : "Sign in"}
-          </button>
-        </form>
-
-        <div className="my-5 flex items-center gap-3">
-          <hr className="flex-1 border-zinc-800" />
-          <span className="text-xs font-bold text-slate-600">OR</span>
-          <hr className="flex-1 border-zinc-800" />
-        </div>
-
-        <button className="button secondary w-full" onClick={signIn} type="button">
-          <Github size={17} /> Continue with GitHub
-        </button>
-
-        <p className="mt-5 text-center text-sm font-bold text-slate-500">
-          {defaultTab === "signup" ? (
-            <>Already have an account?{" "}
-              <button className="text-purple-400 hover:underline" onClick={onClose} type="button">Sign in</button>
-            </>
-          ) : (
-            <>No account?{" "}
-              <button className="text-purple-400 hover:underline" onClick={onClose} type="button">Create one</button>
-            </>
-          )}
-        </p>
-      </div>
-    </div>
-  );
-}
-```
-
-- [x] Create `components/auth/AuthModal.tsx` with the content above.
-- [x] Note: `selectedPlan` prop is already included here — no separate update needed in Phase 19.
-
----
-
-### 15.2 — Wire `AuthModal` into `Navbar.tsx`
-
-In `components/marketing/Navbar.tsx`:
-- [x] Add `"use client"` directive.
-- [x] Import `useState`, `useMockAuth`, `MOCK_USER`, `AuthModal`, `ArrowRight`.
-- [x] Add `const [authOpen, setAuthOpen] = useState(false)` and `const { isAuthenticated, signOut } = useMockAuth()`.
-- [x] Replace the static "Login" and "Start Building" links with a conditional block:
-  ```tsx
-  {isAuthenticated ? (
-    <div className="flex items-center gap-3">
-      <Link className="button secondary" href="/new">Go to app</Link>
-      <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-purple-700 text-sm font-bold text-white">
-        {MOCK_USER.initials}
-      </span>
-      <button className="text-sm font-bold text-slate-300 hover:text-white" onClick={signOut} type="button">Sign out</button>
-    </div>
-  ) : (
-    <div className="flex items-center gap-3">
-      <button className="button secondary" onClick={() => setAuthOpen(true)} type="button">Login</button>
-      <button className="button" onClick={() => setAuthOpen(true)} type="button">Start Building <ArrowRight size={17} /></button>
-    </div>
-  )}
-  ```
-- [x] Render `{authOpen && <AuthModal onClose={() => setAuthOpen(false)} defaultTab="login" />}` at the end of the return.
-
----
-
-### 15.3 — Wire `AuthModal` into the marketing hero prompt send button
-
-- [x] Create `components/marketing/HeroPromptSection.tsx` — see Phase 21.4 for the full component body. This replaces the static `<PromptCard>` in the marketing page and handles the auth gate on send. **Do Phase 21 first, then come back and wire this.**
-- [x] Until Phase 21 is done: extract `components/marketing/HeroSendButton.tsx` as a minimal client stub:
-  ```tsx
-  "use client";
-  import { useState } from "react";
-  import { ArrowRight } from "lucide-react";
-  import { AuthModal } from "@/components/auth/AuthModal";
-
-  export function HeroSendButton() {
-    const [open, setOpen] = useState(false);
-    return (
-      <>
-        <button aria-label="Start from prompt" className="send-btn" onClick={() => setOpen(true)} type="button">
-          <ArrowRight size={20} />
-        </button>
-        {open && <AuthModal onClose={() => setOpen(false)} defaultTab="signup" />}
-      </>
-    );
-  }
-  ```
-- [x] In `app/(marketing)/page.tsx`, replace the `<Link className="send-btn" ...>` inside `PromptCard` with `<HeroSendButton />`.
-
----
-
-### 15.4 — Wire `AuthModal` into pricing CTAs
-
-In `components/marketing/PricingSection.tsx`:
-- [x] Add `"use client"` directive.
-- [x] Import `useState` and `AuthModal`.
-- [x] Add `const [authOpen, setAuthOpen] = useState(false)` and `const [selectedPlan, setSelectedPlan] = useState<string | null>(null)`.
-- [x] Replace each plan CTA `<Link href="/signup" className="button ...">` with a `<button>` that sets both state values:
-  ```tsx
-  onClick={() => { setSelectedPlan(plan.name); setAuthOpen(true); }}
-  ```
-- [x] Render at the bottom:
-  ```tsx
-  {authOpen && (
-    <AuthModal onClose={() => setAuthOpen(false)} defaultTab="signup" selectedPlan={selectedPlan ?? undefined} />
-  )}
-  ```
-
----
-
-### 15.5 — Create `components/shared/AuthGuard.tsx`
-
-```tsx
-"use client";
-
-import { useState, useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import { useMockAuth } from "@/context/MockAuthContext";
-import { AuthModal } from "@/components/auth/AuthModal";
-
-export function AuthGuard({ children }: { children: ReactNode }) {
-  const { isAuthenticated } = useMockAuth();
-  const router = useRouter();
-  const [checked, setChecked] = useState(false);
-
-  useEffect(() => { setChecked(true); }, []);
-
-  if (!checked) return null;
-
-  if (!isAuthenticated) {
-    return (
-      <div className="fixed inset-0 bg-zinc-950">
-        <AuthModal onClose={() => router.push("/")} defaultTab="login" />
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
-```
-
-- [x] Create `components/shared/AuthGuard.tsx` with the content above.
-- [x] In `app/(app)/layout.tsx`, wrap `<AppShell>` with `<AuthGuard>`:
-  ```tsx
-  import { AuthGuard } from "@/components/shared/AuthGuard";
-  return (
-    <AuthGuard>
-      <AppShell>{children}</AppShell>
-    </AuthGuard>
-  );
-  ```
-
----
-
-## ── PHASE 16 ── Route Fixes
-
-**Goal**: Fix all dead links, duplicated routes, and hardcoded project IDs found during flow audit.
-
----
-
-### 16.1 — Remove `/home` route (duplicate of `/new`)
-
-- [x] Delete `app/(app)/home/page.tsx`.
-- [x] In `components/layout/AppShell.tsx`: change every `href="/home"` → `href="/new"`.
-- [x] In `app/(app)/dashboard/page.tsx`: change `href="/home"` → `href="/new"` on the "+ New Project" button.
-- [x] In `components/new-project/NewProjectClient.tsx`: change `href="/home"` → `href="/new"` if present.
-- [x] Verify: `grep -r '"/home"' app/ components/` returns zero results.
-
----
-
-### 16.2 — Fix `/forgot-password` 404
-
-- [x] Create `app/(auth)/forgot-password/page.tsx`:
-  ```tsx
-  "use client";
-
-  import { useState } from "react";
-  import Link from "next/link";
-
-  export default function ForgotPasswordPage() {
-    const [loading, setLoading] = useState(false);
-    const [sent, setSent] = useState(false);
-
-    async function handleSubmit(e: React.FormEvent) {
-      e.preventDefault();
-      setLoading(true);
-      await new Promise((res) => setTimeout(res, 800));
-      setSent(true);
-      setLoading(false);
-    }
-
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-        <div className="w-full max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-8 text-center">
-          <h1 className="text-2xl font-semibold text-white">Reset your password</h1>
-          <p className="mt-2 text-sm font-bold text-slate-500">
-            Enter your account email and we&apos;ll send a reset link.
-          </p>
-          {sent ? (
-            <div className="mt-6 rounded-lg border border-green-800 bg-green-950/40 p-4 text-sm font-semibold text-green-400">
-              Check your email — a reset link is on the way.
-            </div>
-          ) : (
-            <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              <input
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                placeholder="you@example.com"
-                type="email"
-              />
-              <button className="button blue w-full" disabled={loading} type="submit">
-                {loading ? "Sending…" : "Send reset link"}
-              </button>
-            </form>
-          )}
-          <p className="mt-5 text-sm font-bold text-slate-500">
-            <Link className="text-purple-400 hover:underline" href="/login">Back to sign in</Link>
-          </p>
-        </div>
-      </div>
-    );
+    return <BuilderMock project={project} />;
   }
   ```
 
----
-
-### 16.3 — Fix `ProjectBriefModal` hardcoded builder route
-
-- [x] Find the "Start Building" `<Link href="/builder/mock-id">` in `components/new-project/ProjectBriefModal.tsx`.
-- [x] Add a `projectId?: string` prop (default: `"healthtech-proto"`) and use `href={`/builder/${projectId}`}`.
-- [x] In `NewProjectClient.tsx`, pass `projectId={MOCK_PROJECTS[0].id}` to `<ProjectBriefModal>`.
+- [x] In `components/builder/BuilderMock.tsx`:
+  - Import `MockProject` from `@/lib/mock/projects`.
+  - Add `project: MockProject` to `BuilderMockProps` (or define the props type if missing).
+  - Pass `project` down to `PreviewPanel` (used in G.2): `Preview: () => <PreviewPanel project={project} />`.
+  - Find where the project name/title is shown in the builder chrome header. Replace any hardcoded name with `{project.name}`.
 
 ---
 
-### 16.4 — Verify cross-links on auth pages
+### G.2 — Make `PreviewPanel` type-aware
 
-- [x] `app/(auth)/login/page.tsx` — "Forgot password?" links to `/forgot-password` ✓, "No account?" links to `/signup` ✓.
-- [x] `app/(auth)/signup/page.tsx` — "Already have an account?" links to `/login` ✓.
+**Problem**: `PreviewPanel` always shows both "Web" and "Mobile" tabs regardless of project type. `healthtech-proto` is `type: "mobile"` but shows the Kanban web preview under "Web".
 
----
+**Correct behavior:**
 
-## ── PHASE 17 ── Active Navigation State in AppShell
-
-**Goal**: The sidebar highlights the currently active route.
-
----
-
-### 17.1 — Add active-link highlighting and Dashboard nav item
-
-In `components/layout/AppShell.tsx`:
-
-- [x] Add `"use client"` directive.
-- [x] Add `import { usePathname } from "next/navigation"` and `import { LayoutDashboard, LogOut } from "lucide-react"`.
-- [x] Add `const pathname = usePathname()` and `const { signOut } = useMockAuth()` inside the component. Import `useMockAuth`.
-- [x] Add a Dashboard link above the "Projects" heading:
-  ```tsx
-  <Link
-    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition-colors ${
-      pathname === "/dashboard" ? "bg-zinc-800 text-white" : "hover:bg-zinc-800"
-    }`}
-    href="/dashboard"
-  >
-    <LayoutDashboard size={17} /> Dashboard
-  </Link>
-  ```
-- [x] For `SIDEBAR_PROJECTS` links, apply active class when `pathname === \`/builder/${project.id}\``.
-- [x] For `BOTTOM_NAV` links, apply active class when `pathname.startsWith(item.href)`.
-- [x] Below the credits card, add a Sign out button:
-  ```tsx
-  <button
-    className="mt-3 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-bold text-slate-500 hover:bg-zinc-800 hover:text-white transition-colors"
-    onClick={signOut}
-    type="button"
-  >
-    <LogOut size={17} /> Sign out
-  </button>
-  ```
-
----
-
-## ── PHASE 18 ── Auth Loading States on Auth Pages
-
-**Goal**: Sign-in and sign-up buttons on the standalone auth pages show a loading state before calling `signIn()`.
-
----
-
-### 18.1 — Add loading state to `app/(auth)/login/page.tsx`
-
-- [x] The page is already `"use client"` from Phase 14.4.
-- [x] Add `const [loading, setLoading] = useState(false)`.
-- [x] Wrap the sign-in `onClick` / `onSubmit`:
-  ```tsx
-  async function handleSignIn() {
-    setLoading(true);
-    await new Promise((res) => setTimeout(res, 800));
-    signIn();
-  }
-  ```
-- [x] Apply to both the "Sign in" button and "Continue with GitHub" button.
-- [x] While loading: `disabled={loading}`, label changes to `"Signing in…"`.
-
----
-
-### 18.2 — Add loading state to `app/(auth)/signup/page.tsx`
-
-- [x] Same pattern as 18.1. "Create account" → `"Creating account…"` while loading.
-
----
-
-### 18.3 — Add loading state to `AuthModal.tsx`
-
-- [x] Add `const [loading, setLoading] = useState(false)`.
-- [x] `onSubmit`: 800ms delay → `signIn()`. GitHub button: same delay.
-- [x] Button label: `"Signing in…"` / `"Creating account…"` while loading. `disabled={loading}` on both buttons.
-
----
-
-## ── PHASE 19 ── Settings Action Feedback
-
-**Goal**: "Save changes" buttons in settings sections give visual feedback instead of doing nothing.
-
----
-
-### 19.1 — Add "Saved ✓" feedback to settings section save buttons
-
-In `components/settings/sections/AccountSection.tsx` and `components/settings/sections/SecuritySection.tsx`:
-
-- [x] Add `"use client"` directive if not present.
-- [x] Add `const [saved, setSaved] = useState(false)`.
-- [x] On save button click:
-  ```tsx
-  async function handleSave() {
-    await new Promise((res) => setTimeout(res, 600));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-  ```
-- [x] Button renders as:
-  ```tsx
-  <button
-    className={`button ${saved ? "bg-green-700 border-green-600" : "blue"}`}
-    onClick={handleSave}
-    type="button"
-  >
-    {saved ? "Saved ✓" : "Save changes"}
-  </button>
-  ```
-
----
-
-## ── PHASE 20 ── Modal Polish
-
-**Goal**: All modals close on backdrop click and Escape key. ProjectBriefModal gets the same treatment.
-
----
-
-### 20.1 — `ProjectBriefModal` — Escape key + backdrop close
-
-In `components/new-project/ProjectBriefModal.tsx`:
-- [x] Add a `useEffect` that listens for `keydown` and calls `setOpen(false)` on `"Escape"`. Clean up on unmount.
-- [x] On the outermost backdrop `<div>`, add:
-  ```tsx
-  onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
-  ```
-- [x] Add scroll lock: `document.body.style.overflow = "hidden"` on mount, `""` on unmount.
-
----
-
-### 20.2 — End-to-end flow verification checklist
-
-Manually trace each step and fix any broken link found:
-
-- [x] `/` (not logged in) → click "Start Building" in Navbar → `AuthModal` opens → "Continue with GitHub" → `signIn()` → lands on `/new`
-- [x] `/new` → type prompt → click send → `ProjectBriefModal` opens → complete 5 steps → PRD shown → "Start Building" → `/builder/healthtech-proto`
-- [x] Builder → open project menu → click "← Dashboard" → `/dashboard`
-- [x] `/dashboard` → click "Open" on any project card → correct builder route
-- [x] `/dashboard` → sidebar "Settings" → all 6 tabs render
-- [x] Sidebar "Sign out" → lands on `/` → `isAuthenticated` is `false` → Navbar shows Login/Start Building again
-- [x] `/dashboard` (not logged in, direct URL) → `AuthGuard` shows auth modal over dark bg
-- [x] `/forgot-password` → submit form → success message shown
-- [x] `/login` → "Forgot password?" → `/forgot-password` (no 404)
-- [x] Pricing section → click any plan CTA → `AuthModal` opens with selected plan pill
-- [x] Verify `grep -r '"/home"' app/ components/` → zero results
-
----
-
-## ── PHASE 21 ── DRY Prompt Card — Unify Marketing + App Toolbar
-
-**Goal**: The marketing root page (`/`) and the `/new` page both have a `PromptCard` with duplicate tab and toolbar markup. The marketing version is a degraded static clone. This phase extracts shared sub-components and makes both pages use the identical interactive UI. After Phase 14–15 the `AuthModal` handles unauthenticated clicks, so the marketing page no longer needs a read-only toolbar.
-
----
-
-### Duplication map
-
-| Location | Duplicated / degraded code |
+| `project.type` | Preview |
 |---|---|
-| `app/(marketing)/page.tsx` | `appTypes.map()` → `aria-disabled` tabs + `readOnly` textarea + static `<span className="pill">` items + `<Link send-btn>` |
-| `components/new-project/NewProjectClient.tsx` | `appTypes.map()` → interactive tabs + `onChange` textarea + icon buttons + model `<select>` + `<button send-btn>` |
+| `"mobile"` | Render `<MobilePreview />` directly. No tab bar. |
+| `"fullstack"` / `"landing"` | Viewport toggle: `Desktop` / `Tablet` / `Mobile`. Resizes a container around `<WebPreview />`. |
+
+- [x] In `components/builder/panels/PreviewPanel.tsx`:
+  - Add `project: MockProject` to props.
+  - Add viewport state for web projects:
+    ```tsx
+    type Viewport = "desktop" | "tablet" | "mobile";
+    const VIEWPORT_WIDTHS: Record<Viewport, string> = {
+      desktop: "100%",
+      tablet: "768px",
+      mobile: "390px",
+    };
+    ```
+  - Icons for the viewport toggle: `Monitor` (desktop), `Tablet` (tablet), `Smartphone` (mobile) — all from lucide-react.
+  - **If `project.type === "mobile"`**: render `<MobilePreview />` directly. No tab bar. Remove the old `"web" | "mobile"` state entirely.
+  - **If `project.type !== "mobile"`**: render the three-button viewport toggle above `<WebPreview />`. Wrap `<WebPreview />` in a centered container with `style={{ maxWidth: VIEWPORT_WIDTHS[viewport] }}` and `mx-auto transition-all`.
 
 ---
 
-### 21.1 — Extract `components/shared/PromptToolbar.tsx`
+### G.3 — Show project type badge in builder header
 
-```tsx
-"use client";
+- [x] In `components/builder/BuilderMock.tsx`:
+  - Add a `TYPE_LABELS` map:
+    ```tsx
+    const TYPE_LABELS: Record<MockProjectType, string> = {
+      mobile: "Expo · Mobile",
+      fullstack: "Next.js · Fullstack",
+      landing: "Static · Landing",
+    };
+    ```
+  - Next to the project name in the builder chrome, render:
+    `<span className="pill">{TYPE_LABELS[project.type]}</span>`
 
-import { Github, Mic, Paperclip, SlidersHorizontal, ArrowRight } from "lucide-react";
-import { models, type AIModel } from "@/lib/mock/data";
+---
 
-interface PromptToolbarProps {
-  model: AIModel;
-  onModelChange: (model: AIModel) => void;
-  onSend: () => void;
-  canSend: boolean;
-  instanceId?: string; // prevents duplicate <label> id when card appears twice on same page
-}
+## ── PHASE J ── shadcn/ui Migration
 
-export function PromptToolbar({ model, onModelChange, onSend, canSend, instanceId = "prompt" }: PromptToolbarProps) {
-  const selectId = `${instanceId}-model-select`;
-  return (
-    <div className="prompt-toolbar">
-      <div className="toolbar-left">
-        <button aria-label="Attach files" className="icon-btn" title="Attach files" type="button"><Paperclip size={18} /></button>
-        <button aria-label="Connect GitHub" className="icon-btn" title="Connect GitHub" type="button"><Github size={18} /></button>
-        <span className="pill">E-1</span>
-        <label className="sr-only" htmlFor={selectId}>AI model</label>
-        <select
-          className="pill cursor-pointer"
-          id={selectId}
-          onChange={(e) => onModelChange(models.find((m) => m.id === e.target.value) ?? models[0])}
-          value={model.id}
-        >
-          {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-        </select>
-        <span className="pill">Maxx off</span>
-      </div>
-      <div className="toolbar-right">
-        <button aria-label="Prompt settings" className="icon-btn" title="Prompt settings" type="button"><SlidersHorizontal size={18} /></button>
-        <button aria-label="Voice input" className="icon-btn" title="Voice input" type="button"><Mic size={18} /></button>
-        <button
-          aria-label="Send prompt"
-          className="send-btn"
-          disabled={!canSend}
-          onClick={onSend}
-          title="Send prompt"
-          type="button"
-        >
-          <ArrowRight size={20} />
-        </button>
-      </div>
-    </div>
-  );
-}
-```
+**Goal**: Replace hand-rolled interactive components with shadcn/ui. Keep all layout and builder-specific CSS exactly as-is.
 
-- [x] Create `components/shared/PromptToolbar.tsx` with the content above.
-- [x] In `components/new-project/NewProjectClient.tsx`: delete the inline `<div className="prompt-toolbar">` block and replace with:
-  ```tsx
-  <PromptToolbar
-    canSend={canSend}
-    instanceId="new-project"
-    model={model}
-    onModelChange={setModel}
-    onSend={() => { if (canSend) setModalOpen(true); }}
-  />
+**What changes**: Button, Badge, Dialog (AuthModal), Tabs (settings), Progress (credit bar), Tooltip (icon buttons), Sonner (toast — replaces Phase H.1's custom Toast).
+
+**What does NOT change**: `.app-layout`, `.sidebar`, `.builder-chrome`, `.hero`, `.grid-3`, `.grid-4`, `.tool-tab`, `.tool-btn`, `.circle-btn`, `.chip-btn`, `.kanban-grid`, `.sample-app`, `.project-table-row`, and all other layout/builder CSS classes. Those stay in `globals.css` untouched.
+
+---
+
+### J.1 — Install and initialise shadcn
+
+- [x] Run:
+  ```bash
+  pnpm dlx shadcn@latest init
   ```
-- [x] Remove now-unused imports from `NewProjectClient.tsx`: `Paperclip`, `Github`, `SlidersHorizontal`, `Mic`.
+  When prompted:
+  - Style: **Default**
+  - Base color: **Zinc**
+  - CSS variables: **Yes**
+
+- [x] Add the required components:
+  ```bash
+  pnpm dlx shadcn@latest add button badge dialog tabs progress tooltip sonner separator input label textarea dropdown-menu
+  ```
+
+- [x] Verify `components/ui/` folder now exists with the added components.
+- [x] Run `npm run typecheck` — zero errors before continuing.
 
 ---
 
-### 21.2 — Extract `components/shared/PromptTabs.tsx`
+### J.2 — Replace `.button` classes with `<Button>`
 
-```tsx
-"use client";
+**Mapping:**
 
-import { appTypes, type AppType } from "@/lib/mock/data";
+| Current class | shadcn equivalent |
+|---|---|
+| `className="button"` | `<Button>` (default variant) |
+| `className="button blue"` | `<Button>` (default — blue is the default) |
+| `className="button secondary"` | `<Button variant="outline">` |
+| `className="button secondary mt-4 w-full"` | `<Button variant="outline" className="mt-4 w-full">` |
+| `className="button blue w-full"` | `<Button className="w-full">` |
 
-interface PromptTabsProps {
-  activeId: string;
-  onSelect: (type: AppType) => void;
-}
+**Do NOT replace**: `.icon-btn`, `.tool-btn`, `.circle-btn`, `.chip-btn`, `.menu-row` — these are builder/toolbar-specific and stay custom.
 
-export function PromptTabs({ activeId, onSelect }: PromptTabsProps) {
-  return (
-    <>
-      {appTypes.map((type) => {
-        const Icon = type.icon;
-        return (
-          <button
-            className={`app-tab ${activeId === type.id ? "active" : ""}`}
-            key={type.id}
-            onClick={() => onSelect(type)}
-            type="button"
-          >
-            <Icon size={19} /> {type.label}
-          </button>
-        );
-      })}
-    </>
-  );
-}
-```
+- [x] In each of these files, import `Button` from `@/components/ui/button` and replace `.button` usages:
+  - `components/auth/AuthModal.tsx`
+  - `components/marketing/Navbar.tsx`
+  - `components/marketing/HeroCTAButtons.tsx`
+  - `components/marketing/PricingSection.tsx`
+  - `components/layout/AppShell.tsx`
+  - `components/new-project/ProjectBriefModal.tsx`
+  - `components/settings/sections/AccountSection.tsx`
+  - `components/settings/sections/BillingSection.tsx`
+  - `components/settings/sections/DangerSection.tsx`
+  - `components/builder/BuilderMock.tsx` (Share button only)
 
-- [x] Create `components/shared/PromptTabs.tsx` with the content above.
-- [x] In `components/new-project/NewProjectClient.tsx`: replace the `appTypes.map(...)` in the `tabs` prop with `<PromptTabs activeId={appType.id} onSelect={setAppType} />`.
+- [x] Run `npm run typecheck` after this step.
 
 ---
 
-### 21.3 — Create `components/shared/InteractivePromptCard.tsx`
+### J.3 — Replace `.pill` spans with `<Badge>`
 
-```tsx
-"use client";
+**Mapping:**
 
-import { useState } from "react";
-import { PromptCard } from "@/components/shared/PromptCard";
-import { PromptTabs } from "@/components/shared/PromptTabs";
-import { PromptToolbar } from "@/components/shared/PromptToolbar";
-import { appTypes, models, type AppType, type AIModel } from "@/lib/mock/data";
+| Current | shadcn equivalent |
+|---|---|
+| `<span className="pill">text</span>` | `<Badge variant="secondary">text</Badge>` |
+| `<button className="pill" ...>chip</button>` | Keep as-is — prompt chips are interactive, not badges |
 
-interface InteractivePromptCardProps {
-  onSend: (opts: { prompt: string; appType: AppType; model: AIModel }) => void;
-  defaultPrompt?: string;
-  onPromptChange?: (prompt: string) => void;
-  instanceId?: string;
-}
+- [x] In each file, import `Badge` from `@/components/ui/badge` and replace static `.pill` spans:
+  - `components/layout/AppShell.tsx` (plan + credits pills in topbar)
+  - `components/auth/AuthModal.tsx` (selected plan pill)
+  - `components/shared/PromptToolbar.tsx` (E-1, Maxx off pills)
+  - `components/settings/sections/AnalyticsSection.tsx` (event name pills)
+  - `components/builder/BuilderMock.tsx` (type badge from G.3)
 
-export function InteractivePromptCard({
-  onSend,
-  defaultPrompt = "",
-  onPromptChange,
-  instanceId,
-}: InteractivePromptCardProps) {
-  const [appType, setAppType] = useState<AppType>(appTypes[0]);
-  const [prompt, setPrompt] = useState(defaultPrompt);
-  const [model, setModel] = useState<AIModel>(models[0]);
-  const canSend = prompt.trim().length > 0;
-
-  function handlePromptChange(value: string) {
-    setPrompt(value);
-    onPromptChange?.(value);
-  }
-
-  return (
-    <PromptCard tabs={<PromptTabs activeId={appType.id} onSelect={setAppType} />}>
-      <textarea
-        className="prompt-textarea"
-        onChange={(e) => handlePromptChange(e.target.value)}
-        placeholder={appType.placeholder}
-        value={prompt}
-      />
-      <PromptToolbar
-        canSend={canSend}
-        instanceId={instanceId}
-        model={model}
-        onModelChange={setModel}
-        onSend={() => { if (canSend) onSend({ prompt, appType, model }); }}
-      />
-    </PromptCard>
-  );
-}
-```
-
-- [x] Create `components/shared/InteractivePromptCard.tsx` with the content above.
+- [x] `<button className="pill">` prompt chips in `NewProjectClient.tsx` — leave as-is (they are clickable chips, not badges).
 
 ---
 
-### 21.4 — Create `components/marketing/HeroPromptSection.tsx` and update marketing page
+### J.4 — Replace `AuthModal` custom modal with `<Dialog>`
 
-```tsx
-"use client";
+**Why**: `<Dialog>` from shadcn/Radix gives focus trapping, `aria-modal`, Escape key, scroll lock, and backdrop click for free — replacing the manual `useEffect` wiring in `AuthModal`.
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { InteractivePromptCard } from "@/components/shared/InteractivePromptCard";
-import { AuthModal } from "@/components/auth/AuthModal";
-import { useMockAuth } from "@/context/MockAuthContext";
-import type { AppType, AIModel } from "@/lib/mock/data";
+- [x] In `components/auth/AuthModal.tsx`:
+  - Import `Dialog, DialogContent, DialogHeader, DialogTitle` from `@/components/ui/dialog`.
+  - Remove the `useEffect` that manually wires `onKeyDown` (Escape) and `document.body.style.overflow` — `<Dialog>` handles both.
+  - Remove the manual backdrop `<div>` click handler.
+  - Wrap the modal content in:
+    ```tsx
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{defaultTab === "signup" ? "Create your account" : "Welcome back"}</DialogTitle>
+        </DialogHeader>
+        {/* existing form content */}
+      </DialogContent>
+    </Dialog>
+    ```
+  - Replace `<input>` elements with `<Input>` from `@/components/ui/input`.
+  - Replace `<label>` elements with `<Label>` from `@/components/ui/label`.
+  - Keep the `email`, `password`, `canSubmit` controlled state — just swap the elements.
 
-export function HeroPromptSection() {
-  const { isAuthenticated } = useMockAuth();
-  const [authOpen, setAuthOpen] = useState(false);
-  const router = useRouter();
+---
 
-  function handleSend(_opts: { prompt: string; appType: AppType; model: AIModel }) {
-    if (isAuthenticated) {
-      router.push("/new");
-    } else {
-      setAuthOpen(true);
+### J.5 — Replace custom `TabBar` with shadcn `<Tabs>`
+
+**Scope**: Settings tabs and the "Recent Tasks | Deployed Apps" tab header in `NewProjectClient`. Builder toolbar tabs (`.tool-tab`) stay custom — they have icons and are part of the builder chrome.
+
+- [x] In `components/shared/TabBar.tsx`:
+  - Rewrite to use shadcn `<Tabs>`, `<TabsList>`, `<TabsTrigger>`:
+    ```tsx
+    import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+    export function TabBar<T extends string>({ tabs, value, onChange }: TabBarProps<T>) {
+      return (
+        <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
+          <TabsList>
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab} value={tab}>{tab}</TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      );
     }
-  }
-
-  return (
-    <>
-      <InteractivePromptCard instanceId="hero" onSend={handleSend} />
-      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} defaultTab="signup" />}
-    </>
-  );
-}
-```
-
-- [x] Create `components/marketing/HeroPromptSection.tsx` with the content above.
-- [x] In `app/(marketing)/page.tsx`:
-  - Delete the entire static `<PromptCard tabs={...}>` block (the `aria-disabled` tabs, `readOnly` textarea, static pill spans, and `<Link send-btn>` or `<HeroSendButton />`).
-  - Delete the `HeroSendButton` import and `HeroSendButton.tsx` file if it was created in Phase 15.3.
-  - Delete now-unused imports: `PromptCard`, `ArrowRight` (if only used there).
-  - Add `import { HeroPromptSection } from "@/components/marketing/HeroPromptSection"`.
-  - Replace the deleted block with `<HeroPromptSection />`.
+    ```
+  - This keeps the same `TabBar` API — callers (`SettingsMock`, etc.) don't change.
 
 ---
 
-### 21.5 — Simplify `NewProjectClient.tsx` to use `InteractivePromptCard`
+### J.6 — Add `<Progress>` to credit meter in `AppShell`
 
-- [x] Remove `appType`, `prompt`, `model` state from `NewProjectClient.tsx` (they now live inside `InteractivePromptCard`).
-- [x] Add `lastPrompt`, `lastAppType`, `lastModel` state to capture what was submitted:
-  ```tsx
-  const [lastPrompt, setLastPrompt] = useState("");
-  const [lastAppType, setLastAppType] = useState(appTypes[0]);
-  const [lastModel, setLastModel] = useState(models[0]);
-  ```
-- [x] Replace the entire `<PromptCard tabs={...}>` block with:
-  ```tsx
-  <InteractivePromptCard
-    instanceId="new-project"
-    defaultPrompt={chipPrompt}
-    onPromptChange={(p) => setChipPrompt(p)}
-    onSend={({ prompt, appType, model }) => {
-      setLastPrompt(prompt);
-      setLastAppType(appType);
-      setLastModel(model);
-      setModalOpen(true);
-    }}
-  />
-  ```
-- [x] Add `const [chipPrompt, setChipPrompt] = useState("")` — PROMPT_CHIPS set this via `setChipPrompt(...)` instead of `setPrompt(...)`.
-- [x] Update `<ProjectBriefModal>` call to pass `prompt={lastPrompt}` (and `appType`, `model` if the modal accepts them).
-- [x] Remove `PromptCard` import if no longer used directly.
+- [x] In `components/layout/AppShell.tsx`:
+  - Import `Progress` from `@/components/ui/progress`.
+  - Below the credits text (`{MOCK_USER.credits.toLocaleString()} credits remaining`), add:
+    ```tsx
+    <Progress value={(MOCK_USER.credits / 1500) * 100} className="mt-2 h-1.5" />
+    ```
+  - The `1500` total is `MOCK_USER.creditsTotal` if that field exists on `MOCK_USER`, otherwise hardcode for now.
+
+- [x] In `components/settings/sections/BillingSection.tsx`:
+  - Replace the existing `.credit-meter` div with `<Progress>` using the same value calculation.
 
 ---
 
-### 21.6 — Delete dead code + final checks
+### J.7 — Add `<Tooltip>` to icon buttons in builder
 
-- [x] `grep -r "aria-disabled" components/ app/` → zero results.
-- [x] `grep -r 'readOnly' components/ app/` → zero results.
-- [x] `grep -r 'className="pill">GitHub' app/ components/` → zero results.
-- [x] `grep -r '"/home"' app/ components/` → zero results.
-- [x] `npm run typecheck` → zero errors.
-- [x] Dev server: visit `/` — prompt card is fully interactive (tabs switch placeholder, model dropdown works, send opens AuthModal).
-- [x] Dev server: visit `/new` — prompt card is identical in appearance; chips fill textarea; send opens ProjectBriefModal.
+Currently icon buttons have `title` attributes (browser tooltip, inconsistent across OS). Replace with shadcn `<Tooltip>` for consistent styling.
+
+- [x] In `components/builder/BuilderMock.tsx`:
+  - Import `Tooltip, TooltipContent, TooltipProvider, TooltipTrigger` from `@/components/ui/tooltip`.
+  - Wrap the root return in `<TooltipProvider>`.
+  - Wrap each `.tool-btn` button that has a `title` attribute in:
+    ```tsx
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button className="tool-btn" type="button" aria-label="...">
+          <Icon size={16} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+    ```
+  - Remove the `title` attribute from each button once wrapped (tooltip replaces it).
+  - Apply to: Run history, Open preview, Refresh preview, Comments, Share, GitHub, Publish.
+
+---
+
+### J.8 — Install Sonner and wire up root layout
+
+Sonner replaces the custom `Toast` system. **Do not create `components/shared/Toast.tsx`** from Phase H — Sonner covers it entirely.
+
+- [x] In `app/layout.tsx`:
+  - Import `Toaster` from `sonner`.
+  - Add `<Toaster position="bottom-right" richColors />` just before `</body>`.
+
+- [x] Create `lib/toast.ts` as a thin re-export so callers import from one place:
+  ```ts
+  export { toast } from "sonner";
+  ```
+
+- [x] Run `npm run typecheck` — zero errors.
+
+---
+
+### J.9 — Verification
+
+- [x] `npm run typecheck` — zero errors.
+- [x] `/` — marketing page renders, buttons use `<Button>`, pills use `<Badge>`.
+- [x] "Start Building" (hero) → `<Dialog>` opens with focus trapped inside (tab key cycles within modal only).
+- [x] Escape key closes `<Dialog>`.
+- [x] `/settings` — tab bar uses shadcn `<Tabs>`, all 6 tabs switch correctly.
+- [x] `/new` — prompt chips still work (still `.pill` buttons, not `<Badge>`).
+- [x] `AppShell` sidebar — credit `<Progress>` bar renders.
+- [x] Builder tooltip appears on hover over icon buttons.
+- [x] No visual regressions on layout classes (`.app-layout`, `.hero`, etc. unchanged).
+
+---
+
+## ── PHASE H ── Button Interactivity (Dummy Feedback)
+
+**Note**: Phase J (Sonner) must be complete before this phase. Import `toast` from `@/lib/toast` in all files below — do not create a custom Toast component.
+
+**Goal**: Every button on every page does something visible when clicked.
+
+---
+
+### H.1 — Wire dead buttons in `BuilderMock.tsx`
+
+- [x] In `components/builder/BuilderMock.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+  - Add `onClick` to each dead toolbar button:
+
+  | Button | Action |
+  |---|---|
+  | `<History>` Run history | `toast("Run history — coming soon")` |
+  | `<ArrowUpRight>` Open preview | `window.open("/", "_blank"); toast("Opening preview in new tab...")` |
+  | `<RefreshCw>` Refresh | `toast("Preview refreshed")` |
+  | `<MessageSquare>` Comments | `toast("Comments — coming soon")` |
+  | `<Share2>` Share | `toast("Share link copied: https://wildca.ke/share/demo123")` |
+  | `<Github>` GitHub | `toast("Connect GitHub in Settings → Integrations")` |
+
+---
+
+### H.2 — Wire dead buttons in `ChatPanel.tsx`
+
+- [x] In `components/builder/ChatPanel.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+  - Lift `messages` state up into `BuilderMock`: change `const [messages, setMessages] = useState(MOCK_MESSAGES)` in `BuilderMock`, pass `messages` and `onSend` down as props.
+  - Add `onSend: () => void` to `ChatPanelProps`.
+
+  **Canned AI responses** (define in `BuilderMock`, cycle through):
+  ```tsx
+  const MOCK_AI_RESPONSES = [
+    "Done! I've updated the component. Check the Files tab for the diff.",
+    "The Kanban board now supports drag-and-drop. Preview refreshed.",
+    "Added the billing table to the dashboard. 3 files updated.",
+  ] as const;
+  ```
+
+  | Button | Action |
+  |---|---|
+  | `<Zap>` Send | Append next `MOCK_AI_RESPONSES` entry to messages, cycle with index |
+  | `+` Attach file | `toast("File upload — coming soon")` |
+  | `<Paintbrush>` Visual edits | Toggle `visualEdits` boolean state in `BuilderMock`, pass as prop; show active class when on. `toast("Visual edits on")` / `toast("Visual edits off")` |
+  | `Build ▾` | Toggle a small dropdown (3 options: Build / Preview only / Deploy). Each: `toast("Starting {option}...")` |
+  | `<Mic>` Voice | `toast("Voice input — coming soon")` |
+
+---
+
+### H.3 — Wire dead buttons in `PromptToolbar.tsx`
+
+- [x] In `components/shared/PromptToolbar.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+
+  | Button | `toast(...)` |
+  |---|---|
+  | `<Paperclip>` Attach | `"File upload — coming soon"` |
+  | `<Github>` GitHub | `"Connect GitHub in Settings → Integrations"` |
+  | `<SlidersHorizontal>` Settings | `"Prompt settings — coming soon"` |
+  | `<Mic>` Voice | `"Voice input — coming soon"` |
+
+---
+
+### H.4 — Wire dead buttons in Settings sections
+
+- [x] In `components/settings/sections/AccountSection.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+  - `"Change password"` → `toast("Password reset link sent to your email")`
+  - `"Upgrade to Agency"` → `toast("Redirecting to upgrade flow...")`
+
+- [x] In `components/settings/sections/BillingSection.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+  - `"Buy Credits"` → `toast("Opening credit checkout...")`
+  - Credit pack cards → `toast("Added {pack} to cart")`
+  - `"Manage billing"` → `toast("Opening billing portal...")`
+
+---
+
+### H.5 — Wire dead buttons in `ProjectMenu.tsx`
+
+- [x] In `components/builder/ProjectMenu.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+  - Publish/deploy button → `toast("Deploying to Vercel... (mock)")`
+  - `MoreToolsMenu` items with no `tab` → replace `undefined` with `() => toast(\`${item.label} — coming soon\`)`.
+    Change: `onClick={() => item.tab ? setTab(item.tab) : undefined}`
+    To: `onClick={() => item.tab ? setTab(item.tab) : toast(\`${item.label} — coming soon\`)}`
+
+---
+
+### H.6 — Wire filter button in `NewProjectClient.tsx`
+
+- [x] In `components/new-project/NewProjectClient.tsx`:
+  - Import `{ toast }` from `@/lib/toast`.
+  - `<Settings2>` filter button → `onClick={() => toast("Filter — coming soon")}`.
+
+---
+
+## ── PHASE I ── End-to-End Verification
+
+Final gate before this branch is closed and backend work begins.
+
+---
+
+### I.1 — Full click-path check
+
+**Auth + creation flow**
+- [x] `/` → "Start Building" (hero) → `<Dialog>` opens (focus trapped, Escape closes it)
+- [x] `/` → Navbar "Login" → `<Dialog>` opens
+- [x] `AuthModal` → type email + password → button enables → sign in → navigates to `/new`
+- [x] `/new` → type prompt → send → `ProjectBriefModal` opens → 5 steps → PRD shows user's prompt text → "Start Building" → builder
+
+**Builder — project type**
+- [x] `/builder/healthtech-proto` → Preview tab → phone frame only, no Web tab (`type: "mobile"`)
+- [x] `/builder/crm-counterpart` → Preview tab → Desktop/Tablet/Mobile viewport toggle (`type: "fullstack"`)
+- [x] `/builder/bill-generator` → Preview tab → Desktop/Tablet/Mobile viewport toggle (`type: "landing"`)
+- [x] Viewport toggle: Desktop = full width, Tablet = 768px centered, Mobile = 390px centered
+
+**Builder — button feedback**
+- [x] Refresh button → toast "Preview refreshed"
+- [x] Share button → toast with fake share URL
+- [x] Send (Zap) → mock AI reply appends to chat
+- [x] Visual edits → button toggles active state
+- [x] Build dropdown → options appear
+- [x] GitHub button → toast "Connect GitHub in Settings"
+
+**Settings**
+- [x] Settings → `<Tabs>` tab bar switches all 6 panels correctly
+- [x] Settings → Billing → "Buy Credits" → toast fires
+- [x] Settings → Account → "Change password" → toast fires
+- [x] Credit `<Progress>` bar visible in sidebar and billing section
+
+**shadcn components**
+- [x] `<Dialog>` focus trap: Tab key stays inside modal
+- [x] `<Dialog>` Escape key closes modal
+- [x] `<Badge>` pills visible in topbar, analytics section, auth modal
+- [x] `<Button>` renders consistently across marketing, auth, settings
+- [x] `<Tooltip>` visible on hover over builder icon buttons
+- [x] Sonner toast appears bottom-right for all wired buttons
+
+**Responsive**
+- [x] 375px → `.grid-3` becomes 1 column
+- [x] 375px → auth shell shows form only
+- [x] 375px → app sidebar hidden
+- [x] `npm run typecheck` → zero errors
 
 ---
 
 ## ── NOTES FOR CODEX ──
 
-### Order of execution
-Complete phases in order: **14 → 15 → 16 → 17 → 18 → 19 → 20 → 21**. Each phase depends on the previous.
+### Order
+**F → G → J → H → I**. Do not start H before J — H imports `toast` from `@/lib/toast` which requires Sonner (J.8).
 
 ### Hard rules
 1. **No backend calls** — All data from `lib/mock/*`. Do not touch real APIs.
-2. **`"use client"` chain** — `MockAuthContext`, `AuthModal`, `AuthGuard`, `Navbar`, `AppShell`, auth pages, `InteractivePromptCard`, `HeroPromptSection` must all be client components.
-3. **`MockAuthProvider` must wrap the root** — It must be in `app/layout.tsx` before any component that calls `useMockAuth()`.
-4. **`PromptCard` stays a server component** — Do not add `"use client"` to `components/shared/PromptCard.tsx`.
-5. **No `localStorage`** — Mock auth is in-memory React context only. Resets on refresh — intentional.
-6. **`/forgot-password` is public** — Must NOT be inside `AuthGuard`. The `(auth)` route group has no guard.
-7. **Extraction order in Phase 21** — 21.1 → 21.2 → 21.3 → 21.4 → 21.5. Verify `npm run typecheck` passes after each step.
-8. **Do not start Phase B** (Supabase, auth, Fly.io, AI, Stripe) until Phase 20.2 end-to-end checklist is fully passed.
+2. **Toast is Sonner** — Import `toast` from `@/lib/toast`. Do NOT create `components/shared/Toast.tsx`.
+3. **Layout CSS is untouched** — `.app-layout`, `.sidebar`, `.builder-chrome`, `.hero`, `.grid-3`, `.grid-4`, `.project-table-row`, `.tool-tab`, `.tool-btn`, `.circle-btn`, `.chip-btn` stay in `globals.css` unchanged.
+4. **Builder toolbar tabs stay custom** — `.tool-tab` buttons in `BuilderMock` do NOT use shadcn `<Tabs>`. Only the settings `TabBar` migrates.
+5. **Phase G is data-driven** — All preview logic driven by `project.type`. No `if (projectId === "healthtech-proto")` conditions.
+6. **Run `npm run typecheck` after each phase** — G changes `BuilderMock` and `PreviewPanel` signatures simultaneously; both must be done before typecheck.
+7. **Prompt chip buttons stay as `.pill` buttons** — They are interactive, not informational. Do not replace with `<Badge>`.

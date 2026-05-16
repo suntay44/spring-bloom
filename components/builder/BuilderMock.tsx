@@ -9,7 +9,12 @@ import { DiffPanel } from "@/components/builder/panels/DiffPanel";
 import { FilesPanel } from "@/components/builder/panels/FilesPanel";
 import { FindingsPanel } from "@/components/builder/panels/FindingsPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
-import { MOCK_MESSAGES } from "@/lib/mock/messages";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toast } from "@/lib/toast";
+import { MOCK_MESSAGES, type MockMessage } from "@/lib/mock/messages";
+import type { MockProject, MockProjectType } from "@/lib/mock/projects";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
 import { MOCK_SECURITY_RUN } from "@/lib/mock/security";
 
@@ -24,28 +29,73 @@ const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Analytics: BarChart3
 };
 
-const TAB_PANELS: Record<BuilderTab, ReactNode> = {
-  Preview: <PreviewPanel />,
-  Files: <FilesPanel />,
-  Diff: <DiffPanel />,
-  Review: <FindingsPanel title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
-  Security: <FindingsPanel title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
-  Analytics: <AnalyticsPanel />
+const TYPE_LABELS: Record<MockProjectType, string> = {
+  mobile: "Expo · Mobile",
+  fullstack: "Next.js · Fullstack",
+  landing: "Static · Landing"
 };
 
-export function BuilderMock() {
+const MOCK_AI_RESPONSES = [
+  "Done! I've updated the component. Check the Files tab for the diff.",
+  "The Kanban board now supports drag-and-drop. Preview refreshed.",
+  "Added the billing table to the dashboard. 3 files updated."
+] as const;
+
+type BuilderMockProps = {
+  project: MockProject;
+};
+
+function TooltipButton({ label, ariaLabel = label, children, onClick }: { label: string; ariaLabel?: string; children: ReactNode; onClick?: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<button aria-label={ariaLabel} className="tool-btn" onClick={onClick} type="button" />}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function BuilderMock({ project }: BuilderMockProps) {
   const [tab, setTab] = useState<BuilderTab>("Preview");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [messages, setMessages] = useState<MockMessage[]>(MOCK_MESSAGES);
+  const [responseIndex, setResponseIndex] = useState(0);
+  const [visualEdits, setVisualEdits] = useState(false);
+  const TAB_PANELS: Record<BuilderTab, () => ReactNode> = {
+    Preview: () => <PreviewPanel project={project} />,
+    Files: () => <FilesPanel />,
+    Diff: () => <DiffPanel />,
+    Review: () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
+    Security: () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
+    Analytics: () => <AnalyticsPanel />
+  };
+
+  function handleSendMessage() {
+    const response = MOCK_AI_RESPONSES[responseIndex % MOCK_AI_RESPONSES.length] ?? MOCK_AI_RESPONSES[0];
+    setMessages((current) => [...current, { id: `mock-response-${current.length + 1}`, role: "assistant", content: response }]);
+    setResponseIndex((current) => current + 1);
+  }
+
+  function toggleVisualEdits() {
+    setVisualEdits((current) => {
+      const next = !current;
+      toast(next ? "Visual edits on" : "Visual edits off");
+      return next;
+    });
+  }
 
   return (
-    <div className={`builder-page ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <TooltipProvider>
+      <div className={`builder-page ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <header className="builder-chrome">
         <div className="builder-project">
           <button className="project-trigger" onClick={() => setMenuOpen((value) => !value)} type="button">
             <span className="project-mark"><Sparkles size={15} /></span>
-            <span><strong>Task Manager Pro</strong><small>Claude 4.5 Sonnet · model locked</small></span>
+            <span><strong>{project.name}</strong><small>Claude 4.5 Sonnet · model locked</small></span>
+            <Badge variant="secondary">{TYPE_LABELS[project.type]}</Badge>
             <ChevronDown size={15} />
           </button>
           {menuOpen ? <ProjectMenu /> : null}
@@ -53,8 +103,8 @@ export function BuilderMock() {
 
         <div className="builder-toolbar-cluster">
           <div className="chat-header-tools" aria-label="Conversation controls">
-            <button aria-label="View run history" className="tool-btn" title="Run history" type="button"><History size={16} /></button>
-            <button aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} className="tool-btn" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? "Show sidebar" : "Collapse sidebar"} type="button"><PanelLeft size={16} /></button>
+            <TooltipButton ariaLabel="View run history" label="Run history" onClick={() => toast("Run history — coming soon")}><History size={16} /></TooltipButton>
+            <TooltipButton ariaLabel={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} label={sidebarCollapsed ? "Show sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}><PanelLeft size={16} /></TooltipButton>
           </div>
 
           <nav className="builder-top-tools" aria-label="Builder tools">
@@ -68,7 +118,7 @@ export function BuilderMock() {
               );
             })}
             <div className="tools-menu-wrap">
-              <button aria-label="More tools" className="tool-btn" onClick={() => setToolsOpen((value) => !value)} title="More tools" type="button"><MoreHorizontal size={17} /></button>
+              <TooltipButton ariaLabel="More tools" label="More tools" onClick={() => setToolsOpen((value) => !value)}><MoreHorizontal size={17} /></TooltipButton>
               {toolsOpen ? <MoreToolsMenu setTab={setTab} /> : null}
             </div>
           </nav>
@@ -77,27 +127,38 @@ export function BuilderMock() {
         <div className="preview-addressbar">
           <div className="device-pill"><Laptop size={16} /><span>/</span></div>
           <div className="flex items-center gap-2">
-            <button aria-label="Open preview in new tab" className="tool-btn" title="Open preview" type="button"><ArrowUpRight size={16} /></button>
-            <button aria-label="Refresh preview" className="tool-btn" title="Refresh preview" type="button"><RefreshCw size={16} /></button>
+            <TooltipButton ariaLabel="Open preview in new tab" label="Open preview" onClick={() => { window.open("/", "_blank"); toast("Opening preview in new tab..."); }}><ArrowUpRight size={16} /></TooltipButton>
+            <TooltipButton ariaLabel="Refresh preview" label="Refresh preview" onClick={() => toast("Preview refreshed")}><RefreshCw size={16} /></TooltipButton>
           </div>
         </div>
 
         <div className="builder-actions">
-          <button aria-label="Comments" className="tool-btn" title="Comments" type="button"><MessageSquare size={16} /></button>
-          <button className="button secondary" type="button"><Share2 size={16} /> Share</button>
-          <button aria-label="Connect GitHub" className="tool-btn" title="GitHub" type="button"><Github size={17} /></button>
-          <button className="button blue" onClick={() => setTab("Security")} type="button"><Upload size={16} /> Publish</button>
+          <TooltipButton ariaLabel="Comments" label="Comments" onClick={() => toast("Comments — coming soon")}><MessageSquare size={16} /></TooltipButton>
+          <Tooltip>
+            <TooltipTrigger render={<Button onClick={() => toast("Share link copied: https://wildca.ke/share/demo123")} type="button" variant="outline" />}>
+              <Share2 size={16} /> Share
+            </TooltipTrigger>
+            <TooltipContent>Share</TooltipContent>
+          </Tooltip>
+          <TooltipButton ariaLabel="Connect GitHub" label="GitHub" onClick={() => toast("Connect GitHub in Settings → Integrations")}><Github size={17} /></TooltipButton>
+          <Tooltip>
+            <TooltipTrigger render={<Button onClick={() => toast("Deploying to Vercel... (mock)")} type="button" />}>
+              <Upload size={16} /> Publish
+            </TooltipTrigger>
+            <TooltipContent>Publish</TooltipContent>
+          </Tooltip>
         </div>
       </header>
 
       <main className="builder-workspace">
-        {!sidebarCollapsed ? <ChatPanel messages={MOCK_MESSAGES} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} /> : null}
+        {!sidebarCollapsed ? <ChatPanel messages={messages} onSend={handleSendMessage} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} onVisualEditsToggle={toggleVisualEdits} visualEdits={visualEdits} /> : null}
         <section className="preview-pane">
           <div className="preview-browser">
-            {TAB_PANELS[tab]}
+            {TAB_PANELS[tab]()}
           </div>
         </section>
       </main>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

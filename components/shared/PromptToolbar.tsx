@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowRight, Github, Mic, Paperclip, SlidersHorizontal } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "@/lib/toast";
 import { models, type AIModel } from "@/lib/mock/data";
 
 interface PromptToolbarProps {
@@ -17,18 +19,18 @@ export function PromptToolbar({ model, onModelChange, onSend, canSend, instanceI
   return (
     <div className="prompt-toolbar">
       <div className="toolbar-left">
-        <button aria-label="Attach files" className="icon-btn" title="Attach files" type="button"><Paperclip size={18} /></button>
-        <button aria-label="Connect GitHub" className="icon-btn" title="Connect GitHub" type="button"><Github size={18} /></button>
-        <span className="pill">E-1</span>
+        <button aria-label="Attach files" className="icon-btn" onClick={() => toast("File upload — coming soon")} title="Attach files" type="button"><Paperclip size={18} /></button>
+        <button aria-label="Connect GitHub" className="icon-btn" onClick={() => toast("Connect GitHub in Settings → Integrations")} title="Connect GitHub" type="button"><Github size={18} /></button>
+        <Badge variant="secondary">E-1</Badge>
         <label className="sr-only" htmlFor={selectId}>AI model</label>
         <select className="pill cursor-pointer" id={selectId} onChange={(event) => onModelChange(models.find((item) => item.id === event.target.value) ?? models[0])} value={model.id}>
           {models.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
-        <span className="pill">Maxx off</span>
+        <Badge variant="secondary">Maxx off</Badge>
       </div>
       <div className="toolbar-right">
-        <button aria-label="Prompt settings" className="icon-btn" title="Prompt settings" type="button"><SlidersHorizontal size={18} /></button>
-        <button aria-label="Voice input" className="icon-btn" title="Voice input" type="button"><Mic size={18} /></button>
+        <button aria-label="Prompt settings" className="icon-btn" onClick={() => toast("Prompt settings — coming soon")} title="Prompt settings" type="button"><SlidersHorizontal size={18} /></button>
+        <button aria-label="Voice input" className="icon-btn" onClick={() => toast("Voice input — coming soon")} title="Voice input" type="button"><Mic size={18} /></button>
         <button aria-label="Send prompt" className="send-btn" disabled={!canSend} onClick={onSend} title="Send prompt" type="button"><ArrowRight size={20} /></button>
       </div>
     </div>

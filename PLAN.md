@@ -222,11 +222,11 @@ CREDITS             estimates, holds, final charge, itemized credit receipts
 
 - **Framework:** Next.js App Router
 - **Language:** TypeScript strict mode
-- **Styling:** Tailwind CSS
-- **UI system:** shadcn/ui
+- **Styling:** Tailwind CSS + custom CSS layout system (`globals.css`)
+- **UI system:** shadcn/ui for interactive components (Button, Dialog, Tabs, DropdownMenu, Progress, Tooltip, Sonner); custom CSS for layout (`.app-layout`, `.sidebar`, `.builder-chrome`, `.hero`, `.grid-3`, etc.)
 - **Icons:** lucide-react
-- **Animations:** framer-motion where useful
-- **Theme:** next-themes
+- **Animations:** framer-motion for transitions (add when needed, not pre-installed)
+- **Theme:** next-themes (add when dark mode is implemented)
 - **Package manager:** pnpm
 - **Platform hosting:** Cloudflare Pages
 
@@ -353,13 +353,17 @@ app/
   (auth)/               ← auth pages
     login/page.tsx
     signup/page.tsx
+    forgot-password/page.tsx
     layout.tsx
-  (app)/                ← authenticated app
+  (app)/                ← authenticated app shell (AppShell sidebar + topbar)
     dashboard/page.tsx
     new/page.tsx
-    builder/[projectId]/page.tsx
     settings/page.tsx
-    layout.tsx          ← sidebar + nav shell
+    help/page.tsx
+    layout.tsx          ← wraps with AuthGuard + AppShell
+  (builder)/            ← fullscreen builder, NO AppShell sidebar
+    builder/[projectId]/page.tsx
+    layout.tsx          ← wraps with AuthGuard only
   api/
     chat/route.ts
     machines/route.ts
@@ -667,17 +671,17 @@ export const MOCK_USER = {
 
 ### Layout: `app/(app)/layout.tsx`
 ```tsx
-// Uses SidebarProvider + Sidebar from shadcn
-<SidebarProvider>
-  <AppSidebar />          {/* left sidebar */}
-  <main>
-    <TopNav />            {/* top bar: credits badge, user menu */}
-    {children}
-  </main>
-</SidebarProvider>
+// Custom AppShell — does NOT use shadcn SidebarProvider
+// AuthGuard wraps the shell; redirects unauthenticated users to /login
+import { AuthGuard } from "@/components/shared/AuthGuard";
+import { AppShell } from "@/components/layout/AppShell";
+
+export default function AppLayout({ children }) {
+  return <AuthGuard><AppShell>{children}</AppShell></AuthGuard>;
+}
 ```
 
-### Sidebar: `components/layout/AppSidebar.tsx`
+### Sidebar: `components/layout/AppShell.tsx`
 ```
 [Logo]
 ──────────────
@@ -995,28 +999,32 @@ Coding cannot start until the user approves this plan.
 
 **Goal:** The main product screen. Full layout with mock chat, files, and preview.
 
-### Page: `app/(app)/builder/[projectId]/page.tsx`
+### Page: `app/(builder)/builder/[projectId]/page.tsx`
 
-**Layout — three panels:**
+Note: builder lives in `(builder)` route group — NOT `(app)`. This bypasses `AppShell` for a fullscreen layout.
+
+**Layout — two panels with tab bar:**
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ [← Dashboard]  Task Manager Pro  🌐 Web  [Agent: Active ●]         │
-│                                 [Resume ▶] [Deploy ↗] [GitHub]     │
-├──────────────────────┬──────────────────────┬───────────────────────┤
-│  CHAT                │  EDITOR/REVIEW       │  PREVIEW/ANALYTICS    │
-│  ──────────────      │  ──────────────      │  ──────────────       │
-│                      │                      │                       │
-│  [AI message]        │  FileTree            │  [iframe]             │
-│  ✅ Schema created   │  ├── app/            │  or                   │
-│  ✅ Auth pages done  │  │   ├── page.tsx    │  [Phone frame]        │
-│  ✅ Dashboard built  │  │   └── layout.tsx  │  + QR code            │
-│  ✅ Kanban board     │  ├── components/     │                       │
-│  🔄 Team mgmt...     │  └── lib/           │  [Web] [Mobile]       │
-│                      │  Files Diff Review   │  Analytics Security   │
-│  ──────────────      │  CodeEditor          │                       │
-│  [prompt input]      │  (mock code shown)   │                       │
-│  ~10 credits est.    │                      │                       │
-└──────────────────────┴──────────────────────┴───────────────────────┘
+│ [≡]  Task Manager Pro  [Next.js · Fullstack]   [Preview][Files]... │
+│      [History] [collapse]                      [Share][GitHub][↗]  │
+├──────────────────────────────┬──────────────────────────────────────┤
+│  CHAT (left)                 │  PREVIEW PANE (right)                │
+│  ──────────────              │  ──────────────                      │
+│  [AI message]                │  Active tab content:                 │
+│  ✅ 4/5 files generated      │  Preview → web iframe or phone frame  │
+│  🔄 streaming...             │  Files   → file tree                  │
+│                              │  Diff    → diff viewer               │
+│  [quick action chips]        │  Review  → findings panel            │
+│                              │  Security→ security scan panel        │
+│  ──────────────              │  Analytics → analytics panel         │
+│  [composer + send]           │                                      │
+└──────────────────────────────┴──────────────────────────────────────┘
+
+Preview tab behavior is project-type-aware:
+  mobile    → phone frame only (no viewport toggle)
+  fullstack → Desktop / Tablet / Mobile viewport toggle
+  landing   → Desktop / Tablet / Mobile viewport toggle
 ```
 
 ### Mock data: `lib/mock/messages.ts`
@@ -1761,6 +1769,8 @@ create policy "users own their snapshots"
 **`app/api/credits/estimate/route.ts`** — POST estimate credits before action
 
 ### Wire up auth to real pages
+- **Remove `context/MockAuthContext.tsx` entirely** — replace with real Supabase auth.
+- **Remove `components/shared/AuthGuard.tsx`** — replace with `middleware.ts` server-side protection.
 - Replace mock user in sidebar with `supabase.auth.getClaims()`
 - Replace mock projects with Supabase query
 - Signup/login forms → `supabase.auth.signUp()` / `signInWithPassword()`
@@ -2320,25 +2330,31 @@ $$);
 ## Build Order Summary
 
 ```
-Week 1:   Phase 1  (Bootstrap + mock-data foundation)
-Week 1:   Phase 2  (Homepage + pricing UI)
-Week 1:   Phase 3  (Signup/login UI)
-Week 2:   Phase 4  (Dashboard/recent tasks/deployed apps UI — mock data)
-Week 2:   Phase 5  (Prompt-first creation screen UI)
-Week 2:   Phase 6  (5-question project brief UI)
-Week 3:   Phase 7  (Simple PRD + build approval UI)
-Week 3:   Phase 8  (Builder chat + preview UI — mock data)
-Week 4:   Phase 8.5 (Programmer Command Center — review/security/analytics UI)
-Week 4:   Phase 9  (User settings + credits/billing/database/security/analytics UI)
-Week 4:   UI/UX acceptance gate before backend work
-Week 5:   Phase 10 (Platform Supabase schema + auth wired up)
-Week 6:   Phase 11 (AI / Claude streaming integration)
-Week 7:   Review/security agent pipeline + credit receipts
-Week 8:   Phase 12 (Fly.io machine integration)
-Week 9:   Phase 13 (Supabase auto-provisioning)
-Week 9:   Phase 14 (Credits + Stripe billing)
-Week 10:  Analytics instrumentation + generated app events
-Week 11:  Phase 15 (Polish + deployment)
+Week 1:   Phase 1  (Bootstrap + mock-data foundation)             ✅ Done
+Week 1:   Phase 2  (Homepage + pricing UI)                        ✅ Done
+Week 1:   Phase 3  (Signup/login UI)                              ✅ Done
+Week 2:   Phase 4  (Dashboard/recent tasks/deployed apps UI)      ✅ Done
+Week 2:   Phase 5  (Prompt-first creation screen UI)              ✅ Done
+Week 2:   Phase 6  (5-question project brief UI)                  ✅ Done
+Week 3:   Phase 7  (Simple PRD + build approval UI)               ✅ Done
+Week 3:   Phase 8  (Builder chat + preview UI — mock data)        ✅ Done
+Week 4:   Phase 8.5 (Programmer Command Center — review/security) ✅ Done
+Week 4:   Phase 9  (User settings + credits/billing UI)           ✅ Done
+Week 4:   Audit fixes: auth flow, DRY, responsive, mock data      ✅ Done
+Week 5:   Phase F  (Code review bug fixes)                        ← current branch
+Week 5:   Phase G  (Project type awareness in builder)            ← current branch
+Week 5:   Phase J  (shadcn/ui migration — interactive components) ← current branch
+Week 5:   Phase H  (Button interactivity + Sonner toasts)         ← current branch
+Week 5:   Phase I  (End-to-end verification gate)                 ← current branch
+          ── UI/UX GATE PASSED — backend work begins ──
+Week 6:   Phase 10 (Platform Supabase schema + real auth)
+Week 7:   Phase 11 (AI / Claude streaming integration)
+Week 8:   Review/security agent pipeline + credit receipts
+Week 9:   Phase 12 (Fly.io machine integration)
+Week 10:  Phase 13 (Supabase auto-provisioning)
+Week 10:  Phase 14 (Credits + Stripe billing)
+Week 11:  Analytics instrumentation + generated app events
+Week 12:  Phase 15 (Polish + deployment)
 ```
 
 ---

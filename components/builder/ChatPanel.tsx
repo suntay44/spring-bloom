@@ -1,14 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronDown, Mic, Paintbrush, Zap } from "lucide-react";
 import { MessageItem } from "@/components/builder/MessageItem";
+import { toast } from "@/lib/toast";
 import type { BuilderTab } from "@/components/builder/ProjectMenu";
 import type { MockMessage } from "@/lib/mock/messages";
 
 type ChatPanelProps = {
   messages: MockMessage[];
+  onSend: () => void;
   onTabChange: (tab: BuilderTab) => void;
   onToolsOpen: () => void;
+  onVisualEditsToggle: () => void;
+  visualEdits: boolean;
 };
 
 const QUICK_ACTIONS = [
@@ -17,7 +22,11 @@ const QUICK_ACTIONS = [
   { label: "Connect Supabase", action: "tab", tab: "Security" as const }
 ] as const;
 
-export function ChatPanel({ messages, onTabChange, onToolsOpen }: ChatPanelProps) {
+const BUILD_OPTIONS = ["Build", "Preview only", "Deploy"] as const;
+
+export function ChatPanel({ messages, onSend, onTabChange, onToolsOpen, onVisualEditsToggle, visualEdits }: ChatPanelProps) {
+  const [buildMenuOpen, setBuildMenuOpen] = useState(false);
+
   return (
     <aside className="conversation-pane">
       <div className="conversation-scroll">
@@ -34,8 +43,17 @@ export function ChatPanel({ messages, onTabChange, onToolsOpen }: ChatPanelProps
       <div className="agent-composer">
         <textarea placeholder="Ask Wild Cupcake..." />
         <div className="composer-actions">
-          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" type="button">+</button><button className="chip-btn" type="button"><Paintbrush size={15} /> Visual edits</button></div>
-          <div className="flex items-center gap-2"><button className="chip-btn" type="button">Build <ChevronDown size={14} /></button><button aria-label="Voice input" className="circle-btn" type="button"><Mic size={15} /></button><button aria-label="Send message" className="circle-btn primary" type="button"><Zap size={15} /></button></div>
+          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => toast("File upload — coming soon")} type="button">+</button><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
+          <div className="relative flex items-center gap-2">
+            <button className="chip-btn" onClick={() => setBuildMenuOpen((current) => !current)} type="button">Build <ChevronDown size={14} /></button>
+            {buildMenuOpen ? (
+              <div className="build-mode-menu">
+                {BUILD_OPTIONS.map((option) => <button key={option} onClick={() => { toast(`Starting ${option}...`); setBuildMenuOpen(false); }} type="button">{option}</button>)}
+              </div>
+            ) : null}
+            <button aria-label="Voice input" className="circle-btn" onClick={() => toast("Voice input — coming soon")} type="button"><Mic size={15} /></button>
+            <button aria-label="Send message" className="circle-btn primary" onClick={onSend} type="button"><Zap size={15} /></button>
+          </div>
         </div>
       </div>
     </aside>

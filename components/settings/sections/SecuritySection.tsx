@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 const SECURITY_CHECKS = ["Secret scanning", "Dependency risk", "Supabase RLS checks"] as const;
 
@@ -19,7 +20,7 @@ export function SecuritySection() {
       <div className="mt-5 grid-3">
         {SECURITY_CHECKS.map((item) => <label className="font-bold" key={item}><input defaultChecked type="checkbox" /> {item}</label>)}
       </div>
-      <button className={`button mt-5 ${saved ? "bg-green-700 border-green-600" : "blue"}`} onClick={() => void handleSave()} type="button">{saved ? "Saved ✓" : "Save changes"}</button>
+      <Button className={saved ? "mt-5 border-green-600 bg-green-700" : "mt-5"} onClick={() => void handleSave()} type="button">{saved ? "Saved ✓" : "Save changes"}</Button>
     </div>
   );
 }

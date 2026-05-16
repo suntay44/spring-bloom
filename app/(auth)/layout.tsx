@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/shared/Logo";
+import { Badge } from "@/components/ui/badge";
 
 export default function AuthLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
@@ -13,8 +14,8 @@ export default function AuthLayout({ children }: Readonly<{ children: React.Reac
       <aside className="auth-panel">
         <div className="w-full max-w-xl rounded-lg border border-purple-900/60 bg-zinc-950/75 p-6 shadow-lg">
           <div className="mb-4 flex items-center justify-between">
-            <span className="pill">Approved PRD</span>
-            <span className="pill">85 credits</span>
+            <Badge variant="secondary">Approved PRD</Badge>
+            <Badge variant="secondary">85 credits</Badge>
           </div>
           <div className="rounded-lg bg-black p-5 text-white">
             <p className="text-sm font-semibold text-purple-200">Builder preview</p>

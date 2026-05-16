@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { BriefFields } from "./BriefStep";
 
 export type BriefStep = 1 | 2 | 3 | 4 | 5 | 6;
@@ -69,8 +70,8 @@ export function ProjectBriefModal({ appType, model, prompt, projectId = "healtht
           {step === 6 ? <PrdReview appType={appType} model={model} prompt={prompt} /> : null}
         </div>
         <div className="modal-footer">
-          <button className="button secondary" disabled={step === 1} onClick={back} type="button">Back</button>
-          {step < 6 ? <button className="button blue" onClick={next} type="button">{step === 5 ? "Generate PRD" : "Next"}</button> : <Link className="button blue" href={`/builder/${projectId}`}>Start Building <ArrowRight size={17} /></Link>}
+          <Button disabled={step === 1} onClick={back} type="button" variant="outline">Back</Button>
+          {step < 6 ? <Button onClick={next} type="button">{step === 5 ? "Generate PRD" : "Next"}</Button> : <Button render={<Link href={`/builder/${projectId}`} />}>Start Building <ArrowRight size={17} /></Button>}
         </div>
       </div>
     </div>

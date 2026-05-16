@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, Gift, Globe2, HelpCircle, Pin, Search, Settings, ShieldCheck } from "lucide-react";
+import { toast } from "@/lib/toast";
 import { MOCK_USER, creditPercent } from "@/lib/mock/user";
 
 export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics";
@@ -30,7 +31,7 @@ export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void })
       {TOOL_ITEMS.map((item) => {
         const Icon = item.icon;
         return (
-          <button className={item.active ? "active" : ""} key={item.label} onClick={() => item.tab ? setTab(item.tab) : undefined} type="button">
+          <button className={item.active ? "active" : ""} key={item.label} onClick={() => item.tab ? setTab(item.tab) : toast(`${item.label} — coming soon`)} type="button">
             <Icon size={16} />
             <span>{item.label}</span>
             <Pin size={14} />
@@ -68,7 +69,7 @@ export function ProjectMenu() {
           <span style={{ width: creditPercent() }} />
         </div>
       </div>
-      <button className="menu-row accent" type="button">
+      <button className="menu-row accent" onClick={() => toast("Free credits — coming soon")} type="button">
         <Gift size={16} /> Get free credits
       </button>
       <div className="menu-section">
@@ -87,14 +88,14 @@ export function ProjectMenu() {
               {content}
             </Link>
           ) : (
-            <button className="menu-row" key={item.label} type="button">
+            <button className="menu-row" key={item.label} onClick={() => toast(`${item.label} — coming soon`)} type="button">
               {content}
             </button>
           );
         })}
       </div>
       <div className="menu-section">
-        <button className="menu-row" type="button">
+        <button className="menu-row" onClick={() => toast("Help center — coming soon")} type="button">
           <HelpCircle size={16} /> Help <ArrowUpRight className="ml-auto" size={15} />
         </button>
       </div>

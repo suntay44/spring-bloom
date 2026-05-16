@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Settings2 } from "lucide-react";
 import { ProjectBriefModal, type BriefStep } from "@/components/new-project/ProjectBriefModal";
 import { InteractivePromptCard } from "@/components/shared/InteractivePromptCard";
+import { toast } from "@/lib/toast";
 import { appTypes, models, type AIModel, type AppType } from "@/lib/mock/data";
 import { MOCK_PROJECTS } from "@/lib/mock/projects";
 import { MOCK_USER } from "@/lib/mock/user";
@@ -52,7 +53,7 @@ export function NewProjectClient() {
         </div>
       </section>
       <section className="app-content">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 className="text-xl font-semibold">Recent Tasks</h2><span className="text-xl font-semibold text-slate-500">|</span><h2 className="text-xl font-semibold text-slate-500">Deployed Apps</h2></div><button aria-label="Filter tasks" className="icon-btn" type="button"><Settings2 size={18} /></button></div>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4"><div className="flex items-center gap-4"><h2 className="text-xl font-semibold">Recent Tasks</h2><span className="text-xl font-semibold text-slate-500">|</span><h2 className="text-xl font-semibold text-slate-500">Deployed Apps</h2></div><button aria-label="Filter tasks" className="icon-btn" onClick={() => toast("Filter — coming soon")} type="button"><Settings2 size={18} /></button></div>
         <div className="card overflow-hidden"><div className="project-table-row border-b border-zinc-800 bg-zinc-900/50 px-5 py-4 text-xs font-semibold uppercase tracking-normal text-slate-500"><span>ID</span><span>Task</span><span>Last Modified</span><span /></div>
           {MOCK_PROJECTS.map((project) => <Link className="project-table-row border-t border-zinc-900 px-5 py-5 transition-colors hover:bg-zinc-900/70" href={`/builder/${project.id}`} key={project.id}><span className="font-bold text-slate-500">EMT - {project.id.slice(0, 6)}</span><span><strong>{project.name}</strong><span className="mt-1 block text-sm text-slate-500">{project.prompt}</span></span><span className="font-bold text-slate-500">{project.lastUpdated}</span><span className="font-semibold">...</span></Link>)}
         </div>
