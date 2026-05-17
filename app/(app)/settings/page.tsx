@@ -1,12 +1,7 @@
 import { notFound } from "next/navigation";
 import { SettingsMock } from "@/components/settings/SettingsMock";
 import { createClient } from "@/lib/supabase/server";
-
-const PLAN_MAX_CREDITS: Record<string, number> = {
-  free: 100,
-  pro: 1500,
-  agency: 5000,
-};
+import { planLimit } from "@/lib/credits/limits";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -28,15 +23,15 @@ export default async function SettingsPage() {
   const plan = profile?.plan ?? "free";
   const name = profile?.full_name ?? "";
   const credits = Math.max(0, Number(balanceRow?.balance ?? 0));
-  const maxCredits = PLAN_MAX_CREDITS[plan] ?? 100;
+  const maxCredits = planLimit(plan);
 
   const txList = transactions ?? [];
   const spent = txList
-    .filter((t) => t.type === "debit")
-    .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    .filter((t) => t.type === "deduct")
+    .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
   const bonusEarned = txList
     .filter((t) => t.type === "bonus")
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   return (
     <SettingsMock

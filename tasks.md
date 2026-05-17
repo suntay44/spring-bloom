@@ -4,8 +4,8 @@
 > After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Status**: Phases 10, 11, 11b, and 12 complete and verified.
-> **Current phase**: Phase 13 — Supabase Auto-Provisioning
+> **Status**: Phases 10, 11, 11b, 12, and 13 complete and verified.
+> **Current phase**: Phase 14 — Credits + Stripe Billing
 
 ---
 
@@ -108,7 +108,7 @@ All tasks complete. Verified with zero TypeScript errors. Security audit passed.
 
 ---
 
-## ── PHASE 13 ── Supabase Auto-Provisioning
+## ── COMPLETED ── Phase 13 — Supabase Auto-Provisioning
 
 **Goal**: Auto-create a dedicated Supabase project for each Wild Cupcake user on signup.
 When the AI generates a full-stack app with a database, it generates schema + RLS policies into
@@ -401,29 +401,559 @@ Allows the client to poll provisioning state if the user opens the builder right
 
 ---
 
-## ── NEXT ── Phase 14 — Credits + Stripe Billing
+## ── PHASE 14 ── Credits + Stripe Billing
 
-**Begins after Phase 13 verification passes.**
+**Goal**: Real money. Users can buy credit top-up packs via Stripe Checkout, manage their plan
+via the Stripe Customer Portal, and get monthly credits reset automatically. The existing credit
+hold/deduct/refund system (Phase 11) is already wired — this phase adds the payment layer on top.
 
-Key tasks:
-- Stripe Checkout for credit top-up packs ($17/100cr, $40/250cr, $80/500cr, $150/1000cr)
-- `POST /api/webhooks/stripe` — handle `checkout.session.completed` → insert credit transaction
-- Monthly plan credit reset via `pg_cron` or Supabase scheduled function
-- `/settings` billing section: live Stripe Customer Portal link
-- Plan upgrade/downgrade flow
+**Pre-requisites** (must be in `.env.local`):
+```
+STRIPE_SECRET_KEY=sk_test_...        ← Stripe secret key (use test key for dev)
+STRIPE_PUBLISHABLE_KEY=pk_test_...   ← Stripe publishable key
+STRIPE_WEBHOOK_SECRET=whsec_...      ← From Stripe Dashboard → Webhooks → signing secret
+NEXT_PUBLIC_APP_URL=http://localhost:3001  ← Used for Stripe redirect URLs
+```
 
-See PLAN.md Phase 14 for full spec.
+**Credit pricing (canonical — do not change without updating PRICING.md):**
+```
+1 credit = $0.17 USD
+Free:    $0/month  —   5 credits/month
+Starter: $16/month — 100 credits/month
+Pro:     $20/month — 175 credits/month
+Teams:   $60/month — 500 credits/month
 
-The existing `profiles` table has `fly_machine_id` — but each **project** needs its own machine.
+Top-up packs (one-time, no expiry):
+  100 cr → $17   |  250 cr → $40   |  500 cr → $75   |  1,000 cr → $140
+```
+
+---
+
+### 14.1 — Add `stripe_customer_id` to profiles + fix plan credit limits
 
 - [ ] Run in Supabase SQL editor:
   ```sql
-  alter table public.projects
-    add column if not exists fly_machine_id text,
-    add column if not exists fly_machine_status text default 'stopped'
-      check (fly_machine_status in ('created','starting','started','stopping','stopped','destroying','destroyed'));
+  alter table public.profiles
+    add column if not exists stripe_customer_id text;
   ```
-- [ ] Verify `pnpm typecheck` still passes.
+- [ ] Fix `PLAN_CREDIT_LIMITS` in `components/layout/AppShell.tsx` — current values are wrong:
+  ```typescript
+  // CORRECT values (match PRICING.md):
+  const PLAN_CREDIT_LIMITS: Record<AppShellProfile["plan"], number> = {
+    free: 5,
+    starter: 100,
+    pro: 175,
+    teams: 500,
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.2 — Create `lib/stripe/client.ts` — server-only Stripe singleton
+
+- [ ] Install Stripe: `pnpm add stripe`
+- [ ] Create `lib/stripe/client.ts`:
+  ```typescript
+  // SERVER ONLY — never import in client components
+  import Stripe from 'stripe'
+
+  let _stripe: Stripe | null = null
+
+  export function getStripe(): Stripe {
+    if (!_stripe) {
+      _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: '2025-01-27.acacia',
+        typescript: true,
+      })
+    }
+    return _stripe
+  }
+
+  // Top-up pack definitions — single source of truth
+  export const CREDIT_PACKS = [
+    { credits: 100,  priceUsd: 17,  label: '100 credits',   popular: false },
+    { credits: 250,  priceUsd: 40,  label: '250 credits',   popular: true  },
+    { credits: 500,  priceUsd: 75,  label: '500 credits',   popular: false },
+    { credits: 1000, priceUsd: 140, label: '1,000 credits', popular: false },
+  ] as const
+
+  export type CreditPack = typeof CREDIT_PACKS[number]
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.3 — Create `app/api/credits/checkout/route.ts` — Stripe Checkout session
+
+- [ ] Create `app/api/credits/checkout/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+  import { getStripe, CREDIT_PACKS } from '@/lib/stripe/client'
+
+  export async function POST(req: Request) {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { credits } = await req.json() as { credits: number }
+    const pack = CREDIT_PACKS.find((p) => p.credits === credits)
+    if (!pack) return NextResponse.json({ error: 'Invalid pack' }, { status: 400 })
+
+    const stripe = getStripe()
+
+    // Get or create Stripe customer
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id, full_name')
+      .eq('id', user.id)
+      .single() as { data: { stripe_customer_id: string | null; full_name: string | null } | null; error: unknown }
+
+    let customerId = profile?.stripe_customer_id
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: profile?.full_name ?? undefined,
+        metadata: { user_id: user.id },
+      })
+      customerId = customer.id
+      await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL!
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: pack.priceUsd * 100, // cents
+          product_data: {
+            name: `Wild Cupcake — ${pack.label}`,
+            description: `${pack.credits} credits · $${(pack.priceUsd / pack.credits).toFixed(3)}/credit · no expiry`,
+          },
+        },
+      }],
+      metadata: {
+        user_id: user.id,
+        credits: String(pack.credits),
+      },
+      success_url: `${appUrl}/settings?credits=success`,
+      cancel_url: `${appUrl}/settings?credits=cancelled`,
+    })
+
+    return NextResponse.json({ url: session.url })
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.4 — Create `app/api/webhooks/stripe/route.ts` — handle payment + subscription events
+
+- [ ] Create `app/api/webhooks/stripe/route.ts`:
+  ```typescript
+  import { createClient } from '@supabase/supabase-js'
+  import { NextResponse } from 'next/server'
+  import { getStripe } from '@/lib/stripe/client'
+
+  // Service-role client — credit grants bypass RLS
+  const platformClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+
+  export async function POST(req: Request) {
+    const stripe = getStripe()
+    const sig = req.headers.get('stripe-signature')
+    if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
+
+    let event
+    try {
+      const body = await req.text()
+      event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!)
+    } catch {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
+    }
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object
+      const userId = session.metadata?.user_id
+      const credits = Number(session.metadata?.credits ?? 0)
+
+      if (!userId || !credits) {
+        return NextResponse.json({ error: 'Missing metadata' }, { status: 400 })
+      }
+
+      // Insert credit grant transaction
+      await (platformClient as unknown as ReturnType<typeof createClient<any>>)
+        .from('credit_transactions')
+        .insert({
+          user_id: userId,
+          type: 'grant',
+          amount: credits,
+          metadata: {
+            stripe_session_id: session.id,
+            stripe_payment_intent: session.payment_intent,
+          },
+        })
+    }
+
+    return NextResponse.json({ received: true })
+  }
+
+  // Required: disable body parsing so stripe-signature verification works
+  export const config = { api: { bodyParser: false } }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.5 — Create `app/api/credits/portal/route.ts` — Stripe Customer Portal
+
+- [ ] Create `app/api/credits/portal/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+  import { getStripe } from '@/lib/stripe/client'
+
+  export async function POST() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .single() as { data: { stripe_customer_id: string | null } | null; error: unknown }
+
+    if (!profile?.stripe_customer_id) {
+      return NextResponse.json({ error: 'No billing account found' }, { status: 404 })
+    }
+
+    const stripe = getStripe()
+    const session = await stripe.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
+    })
+
+    return NextResponse.json({ url: session.url })
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.6 — Wire Stripe Checkout into `BillingSection.tsx`
+
+- [ ] In `components/settings/sections/BillingSection.tsx`:
+  - Replace static "Buy" buttons with real async handlers that call `POST /api/credits/checkout`
+  - On success: redirect to `session.url` (Stripe Checkout page)
+  - Show spinner on button while fetching
+  - Add "Manage billing" button that calls `POST /api/credits/portal` and redirects
+  - Add success/cancelled toast based on `?credits=success` or `?credits=cancelled` query param on page load
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.7 — Add plan enforcement to `/api/chat/route.ts`
+
+Gate model access server-side by the user's plan. Never trust the client.
+
+- [ ] In `app/api/chat/route.ts`, after loading `modelPricing`, add:
+  ```typescript
+  // Load user plan for model gate check
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan')
+    .eq('id', user.id)
+    .single() as { data: { plan: string } | null; error: unknown }
+
+  const planOrder = ['free', 'starter', 'pro', 'teams']
+  const userPlanIndex = planOrder.indexOf(profile?.plan ?? 'free')
+  const requiredPlanIndex = planOrder.indexOf(modelPricing.min_plan ?? 'free')
+
+  if (userPlanIndex < requiredPlanIndex) {
+    return NextResponse.json(
+      { error: `This model requires the ${modelPricing.min_plan} plan or higher` },
+      { status: 403 }
+    )
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.8 — Monthly credit reset via pg_cron
+
+- [ ] Run in Supabase SQL editor:
+  ```sql
+  -- Enable pg_cron extension (only needs to be done once per project)
+  create extension if not exists pg_cron;
+
+  -- Reset credits on the 1st of every month at midnight UTC
+  -- Uses user_credit_balance view's monthly allocation from plan
+  select cron.schedule(
+    'monthly-credit-reset',
+    '0 0 1 * *',
+    $$
+      insert into public.credit_transactions (user_id, type, amount, metadata)
+      select
+        p.id,
+        'grant',
+        case p.plan
+          when 'free'    then 5
+          when 'starter' then 100
+          when 'pro'     then 175
+          when 'teams'   then 500
+          else 0
+        end,
+        '{"reason": "monthly_reset"}'::jsonb
+      from public.profiles p
+      where p.plan != 'free' or (
+        -- Free users only get reset if balance is below 5
+        select coalesce(sum(amount), 0)
+        from public.credit_transactions
+        where user_id = p.id
+      ) < 5;
+    $$
+  );
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.9 — Add low-credit banner to `AppShell.tsx`
+
+When a user has < 10 credits, show a warning banner above the credit progress bar.
+
+- [ ] In `components/layout/AppShell.tsx`:
+  ```typescript
+  {balance < 10 ? (
+    <div className="mt-2 rounded-md bg-amber-950/50 px-3 py-2 text-xs font-semibold text-amber-400">
+      ⚠ Running low — {balance.toLocaleString()} credits left
+    </div>
+  ) : null}
+  ```
+  Add this just above the `<Progress>` bar in the credit section.
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 14.10 — Verification
+
+- [ ] `pnpm typecheck` — zero TypeScript errors.
+- [ ] `pnpm dev` — no runtime errors.
+- [ ] Run Stripe CLI locally to test webhook: `stripe listen --forward-to localhost:3001/api/webhooks/stripe`
+- [ ] Go to Settings → click "Buy 250 credits" → Stripe Checkout opens with correct amount ($40).
+- [ ] Use Stripe test card `4242 4242 4242 4242` → payment succeeds → redirected to `/settings?credits=success`.
+- [ ] Check `credit_transactions` table — new `grant` row with `amount: 250` and `stripe_session_id` in metadata.
+- [ ] Check `user_credit_balance` view — balance increased by 250.
+- [ ] Credit counter in sidebar updates after page refresh.
+- [ ] Try sending a message with a model above your plan tier → get 403 error.
+- [ ] Balance < 10 → low-credit banner appears in sidebar.
+- [ ] "Manage billing" button → Stripe Customer Portal opens.
+- [ ] `PLAN_CREDIT_LIMITS` in AppShell shows correct values (free: 5, starter: 100, pro: 175, teams: 500).
+
+---
+
+## ── PHASE 15 ── Final Polish + Deployment
+
+**Goal**: Ship-ready. Error boundaries, loading states, security headers, rate limiting, SEO, and Cloudflare Pages deployment.
+
+**Pre-requisites**: Phase 14 verified ✅. `pnpm typecheck` passes ✅.
+
+**Bugs already fixed before Phase 15 (do not redo):**
+- `lib/credits/limits.ts` created — single source of truth for plan credit limits
+- `settings/page.tsx` and `project/[projectId]/page.tsx` — removed stale `PLAN_MAX_CREDITS` (free:100, pro:1500, agency:5000), now use `planLimit()` from `lib/credits/limits.ts`
+- `AppShell.tsx` — removed inline `PLAN_CREDIT_LIMITS`, now uses `planLimit()`
+- `BillingSection.tsx` — fixed `"debit"` → `"deduct"` in all 3 helper functions + `"grant"` → `"monthly_reset"` in txColor
+- `app/layout.tsx` — restored `Inter` font via `next/font/google` with `--font-inter` CSS variable
+- `next.config.ts` — fixed `allowedDevOrigins: ["localhost", "127.0.0.1"]`
+- `app/api/webhooks/stripe/route.ts` — fixed silent failure: `type: "grant"` → `"purchase"`, added idempotency check on `stripe_session_id` (error code 23505), added error logging
+- `supabase/migrations/005_monthly_credit_reset.sql` — fixed `type: "grant"` → `"monthly_reset"`
+- `components/builder/PhoneFrame.tsx` — full device spec system (5 devices: iPhone SE/15/15 Pro Max, Galaxy S24/S24 Ultra)
+- `components/builder/panels/PreviewPanel.tsx` — web viewport switcher + mobile device picker, works on both mock and live Fly.io iframe
+- Fly machine columns added to production Supabase via Management API
+
+---
+
+### 15.1 — Error pages
+
+- [ ] Create `app/not-found.tsx`:
+  ```tsx
+  import Link from "next/link";
+  export default function NotFound() {
+    return (
+      <main className="grid min-h-screen place-items-center bg-zinc-950 text-white">
+        <div className="text-center">
+          <p className="text-sm font-bold uppercase tracking-widest text-purple-400">404</p>
+          <h1 className="mt-4 text-4xl font-semibold">Page not found</h1>
+          <p className="mt-3 text-slate-400">The page you're looking for doesn't exist or was moved.</p>
+          <Link className="mt-8 inline-block rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold hover:bg-purple-500" href="/">
+            Go home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+  ```
+- [ ] Create `app/error.tsx`:
+  ```tsx
+  "use client";
+  import { useEffect } from "react";
+  export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+    useEffect(() => { console.error(error); }, [error]);
+    return (
+      <main className="grid min-h-screen place-items-center bg-zinc-950 text-white">
+        <div className="text-center">
+          <p className="text-sm font-bold uppercase tracking-widest text-red-400">Error</p>
+          <h1 className="mt-4 text-4xl font-semibold">Something went wrong</h1>
+          <p className="mt-3 text-slate-400">An unexpected error occurred. Our team has been notified.</p>
+          <button className="mt-8 rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold hover:bg-purple-500" onClick={reset} type="button">
+            Try again
+          </button>
+        </div>
+      </main>
+    );
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.2 — Error boundaries on async server pages
+
+Wrap the three main async page layouts in error boundaries so a single broken query doesn't white-screen the user.
+
+- [ ] Create `app/(app)/error.tsx` (same pattern as root error.tsx above but without `min-h-screen` — inherits app shell layout)
+- [ ] Create `app/(builder)/error.tsx` (same pattern)
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.3 — Rate limiting on `/api/chat` via Upstash Redis
+
+- [ ] Verify `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are in `.env.local`.
+- [ ] Install: `pnpm add @upstash/ratelimit @upstash/redis`
+- [ ] Create `lib/rate-limit.ts`:
+  ```typescript
+  import { Ratelimit } from "@upstash/ratelimit";
+  import { Redis } from "@upstash/redis";
+
+  export const chatRateLimit = new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(10, "60 s"),
+    prefix: "wc:chat",
+  });
+  ```
+- [ ] In `app/api/chat/route.ts`, after auth check add:
+  ```typescript
+  const { success, limit, remaining } = await chatRateLimit.limit(user.id);
+  if (!success) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429, headers: { "X-RateLimit-Limit": String(limit), "X-RateLimit-Remaining": String(remaining) } }
+    );
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.4 — Security headers in `next.config.ts`
+
+- [ ] Add COOP/COEP headers (required for WebContainers/SharedArrayBuffer) and full security header set to `next.config.ts`:
+  ```typescript
+  { key: "Cross-Origin-Opener-Policy",   value: "same-origin" },
+  { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+  { key: "Strict-Transport-Security",    value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "X-Frame-Options",              value: "DENY" },
+  { key: "X-Content-Type-Options",       value: "nosniff" },
+  { key: "Referrer-Policy",              value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy",           value: "camera=(), microphone=(), geolocation=()" },
+  ```
+  Merge with existing headers already in `next.config.ts` (don't duplicate).
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.5 — SEO metadata
+
+- [ ] In `app/(marketing)/pricing/page.tsx` add:
+  ```typescript
+  export const metadata = {
+    title: "Pricing — Wild Cupcake",
+    description: "Simple, credit-based pricing. Start free, scale as you build.",
+  };
+  ```
+- [ ] In `app/(app)/dashboard/page.tsx` add:
+  ```typescript
+  export const metadata = { title: "Dashboard — Wild Cupcake" };
+  ```
+- [ ] In `app/(app)/settings/page.tsx` add:
+  ```typescript
+  export const metadata = { title: "Settings — Wild Cupcake" };
+  ```
+- [ ] Verify root `app/layout.tsx` already has `title: "Wild Cupcake"` and `description` — it does, no change needed.
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.6 — Remove `console.log` from production code
+
+- [ ] Run: `grep -rn "console.log" app/ lib/ components/ --include="*.ts" --include="*.tsx"`
+- [ ] Remove every `console.log` found. Keep `console.error` in API routes (needed for server-side error visibility).
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.7 — Stub API routes: return 501 instead of null
+
+The following routes currently return `{ data: null }` which causes silent failures. Replace with a proper 501 Not Implemented response so the client knows the feature is pending.
+
+- [ ] `app/api/credits/route.ts`
+- [ ] `app/api/credits/estimate/route.ts`
+- [ ] `app/api/projects/[id]/route.ts`
+- [ ] `app/api/projects/[id]/messages/route.ts`
+- [ ] `app/api/projects/[id]/brief/route.ts`
+- [ ] `app/api/projects/[id]/brief/approve/route.ts`
+- [ ] `app/api/projects/[id]/agent-runs/route.ts`
+
+Each should return:
+```typescript
+return NextResponse.json({ error: "Not implemented" }, { status: 501 });
+```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 15.8 — `pnpm build` passes cleanly
+
+- [ ] Run `pnpm build` — zero errors, zero type errors.
+- [ ] Check bundle sizes in build output — warn if any route exceeds 250 KB (first load JS).
+- [ ] Fix any build-time errors before proceeding.
+
+---
+
+### 15.9 — Verification checklist
+
+- [ ] `pnpm typecheck` — zero errors.
+- [ ] `pnpm build` — succeeds cleanly.
+- [ ] `/` loads → landing page renders correctly.
+- [ ] `/login` → `/signup` → email confirmation → `/dashboard` flow works.
+- [ ] `/dashboard` → create project → builder opens → no 404.
+- [ ] Builder viewport switcher works (Desktop / Tablet / Mobile).
+- [ ] Builder mobile device switcher works (iPhone SE → 15 → 15 Pro Max → Galaxy S24 → S24 Ultra).
+- [ ] Settings → Billing → credit balance shows correct plan limit (free = 5/month).
+- [ ] Settings → Billing → buy credits → Stripe Checkout → webhook fires → balance updates.
+- [ ] Navigate to `/nonexistent` → shows custom 404 page.
+- [ ] Rate limit: send 11 chat messages in 60s → 11th returns 429.
+- [ ] Security headers present: `curl -I http://localhost:3001 | grep -E "X-Frame|COEP|COOP"`
 
 ---
 

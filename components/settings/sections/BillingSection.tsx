@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowUpRight, CreditCard, Gift, Sparkles, TrendingUp, Zap } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/lib/toast";
@@ -16,9 +18,10 @@ type BillingSectionProps = {
 };
 
 const CREDIT_PACKS: Array<{ label: string; credits: number; price: string; perCredit: string; popular?: boolean }> = [
-  { label: "Starter", credits: 400, price: "$10", perCredit: "$0.025" },
-  { label: "Growth", credits: 1_000, price: "$22", perCredit: "$0.022", popular: true },
-  { label: "Scale", credits: 3_000, price: "$60", perCredit: "$0.020" },
+  { label: "100 credits", credits: 100, price: "$17", perCredit: "$0.170" },
+  { label: "250 credits", credits: 250, price: "$40", perCredit: "$0.160", popular: true },
+  { label: "500 credits", credits: 500, price: "$75", perCredit: "$0.150" },
+  { label: "1,000 credits", credits: 1_000, price: "$140", perCredit: "$0.140" },
 ];
 
 const PLAN_LABELS: Record<string, string> = {
@@ -32,12 +35,13 @@ function formatDate(iso: string) {
 }
 
 function txLabel(tx: CreditTransaction): string {
+  if (tx.type === "grant") return "Credit grant";
   if (tx.type === "bonus") {
     const reason = (tx.metadata as { reason?: string } | null)?.reason;
     if (reason === "signup_bonus") return "Signup bonus";
     return "Bonus credits";
   }
-  if (tx.type === "debit") return "AI generation";
+  if (tx.type === "deduct") return "AI generation";
   if (tx.type === "hold") return "Credit hold";
   if (tx.type === "refund") return "Refund";
   if (tx.type === "purchase") return "Credit purchase";
@@ -45,21 +49,60 @@ function txLabel(tx: CreditTransaction): string {
 }
 
 function txSign(tx: CreditTransaction) {
-  if (tx.type === "debit" || tx.type === "hold") return "-";
+  if (tx.type === "deduct" || tx.type === "hold") return "-";
   return "+";
 }
 
 function txColor(tx: CreditTransaction) {
-  if (tx.type === "bonus" || tx.type === "refund" || tx.type === "purchase") return "text-emerald-400";
-  if (tx.type === "debit") return "text-red-400";
+  if (tx.type === "bonus" || tx.type === "refund" || tx.type === "purchase" || tx.type === "monthly_reset") return "text-emerald-400";
+  if (tx.type === "deduct") return "text-red-400";
   return "text-slate-400";
 }
 
 export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, transactions }: BillingSectionProps) {
+  const searchParams = useSearchParams();
+  const [checkoutCredits, setCheckoutCredits] = useState<number | null>(null);
+  const [isPortalLoading, setIsPortalLoading] = useState(false);
   const usedPercent = maxCredits > 0 ? Math.min(100, (spent / maxCredits) * 100) : 0;
   const balancePercent = maxCredits > 0 ? Math.min(100, (credits / maxCredits) * 100) : 0;
   const planLabel = PLAN_LABELS[plan] ?? plan;
   const isLowBalance = credits < maxCredits * 0.1;
+
+  useEffect(() => {
+    const status = searchParams.get("credits");
+    if (status === "success") toast.success("Credits purchased successfully.");
+    if (status === "cancelled") toast.info("Credit checkout cancelled.");
+  }, [searchParams]);
+
+  async function handleCheckout(packCredits: number) {
+    setCheckoutCredits(packCredits);
+    try {
+      const res = await fetch("/api/credits/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credits: packCredits }),
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Unable to start checkout");
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to start checkout");
+      setCheckoutCredits(null);
+    }
+  }
+
+  async function handleBillingPortal() {
+    setIsPortalLoading(true);
+    try {
+      const res = await fetch("/api/credits/portal", { method: "POST" });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Unable to open billing portal");
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to open billing portal");
+      setIsPortalLoading(false);
+    }
+  }
 
   return (
     <div className="grid gap-6">
@@ -82,8 +125,8 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
               <p className="mt-2 text-sm font-semibold text-red-400">✕ Out of credits — purchase more to continue</p>
             )}
           </div>
-          <Button className="shrink-0" onClick={() => toast("Opening credit checkout...")} type="button">
-            <CreditCard size={16} /> Buy Credits
+          <Button className="shrink-0" disabled={checkoutCredits !== null} onClick={() => void handleCheckout(250)} type="button">
+            <CreditCard size={16} /> {checkoutCredits === 250 ? "Opening..." : "Buy Credits"}
           </Button>
         </div>
         <div className="mt-5 space-y-1.5">
@@ -151,7 +194,7 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
       {/* Credit packs */}
       <div>
         <h3 className="mb-3 font-semibold text-slate-300">Top up with a one-time pack</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           {CREDIT_PACKS.map((pack) => (
             <button
               className={`relative rounded-xl border p-5 text-left transition-colors hover:border-slate-600 ${
@@ -159,8 +202,9 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
                   ? "border-violet-600 bg-violet-950/30 hover:border-violet-500"
                   : "border-zinc-800 bg-zinc-900"
               }`}
+              disabled={checkoutCredits !== null}
               key={pack.label}
-              onClick={() => toast(`Added ${pack.credits.toLocaleString()} credits pack to cart`)}
+              onClick={() => void handleCheckout(pack.credits)}
               type="button"
             >
               {pack.popular ? (
@@ -172,6 +216,7 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
               <p className="mt-2 text-2xl font-bold">{pack.credits.toLocaleString()} <span className="text-base font-semibold text-slate-400">credits</span></p>
               <p className="mt-1 text-xl font-semibold">{pack.price}</p>
               <p className="mt-1 text-xs text-slate-500">{pack.perCredit} / credit</p>
+              <p className="mt-4 text-sm font-semibold text-slate-300">{checkoutCredits === pack.credits ? "Opening checkout..." : "Buy pack"}</p>
             </button>
           ))}
         </div>
@@ -191,14 +236,17 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
           </div>
           <div className="flex gap-3">
             {plan === "free" ? (
-              <Button onClick={() => toast("Redirecting to upgrade flow...")} type="button">
-                <ArrowUpRight size={16} /> Upgrade to Pro
+              <Button disabled={checkoutCredits !== null} onClick={() => void handleCheckout(250)} type="button">
+                <ArrowUpRight size={16} /> {checkoutCredits === 250 ? "Opening..." : "Upgrade to Pro"}
               </Button>
             ) : (
-              <Button onClick={() => toast("Opening billing portal...")} type="button" variant="outline">
-                Manage subscription
+              <Button disabled={isPortalLoading} onClick={() => void handleBillingPortal()} type="button" variant="outline">
+                {isPortalLoading ? "Opening..." : "Manage subscription"}
               </Button>
             )}
+            <Button disabled={isPortalLoading} onClick={() => void handleBillingPortal()} type="button" variant="outline">
+              {isPortalLoading ? "Opening..." : "Manage billing"}
+            </Button>
           </div>
         </div>
       </div>

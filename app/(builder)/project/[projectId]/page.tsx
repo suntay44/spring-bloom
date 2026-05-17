@@ -4,12 +4,7 @@ import { BuilderMock } from "@/components/builder/BuilderMock";
 import { createClient } from "@/lib/supabase/server";
 import type { MockProject } from "@/lib/mock/projects";
 import type { ProjectMenuUser } from "@/components/builder/ProjectMenu";
-
-const PLAN_MAX_CREDITS: Record<string, number> = {
-  free: 100,
-  pro: 1500,
-  agency: 5000,
-};
+import { planLimit } from "@/lib/credits/limits";
 
 export default async function ProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -72,7 +67,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   const plan = profile?.plan ?? "free";
   const fullName = profile?.full_name ?? user.email?.split("@")[0] ?? "User";
   const credits = Math.max(0, Number(balanceRow?.balance ?? 0));
-  const maxCredits = PLAN_MAX_CREDITS[plan] ?? 100;
+  const maxCredits = planLimit(plan);
 
   const menuUser: ProjectMenuUser = {
     initials: fullName.charAt(0).toUpperCase(),
