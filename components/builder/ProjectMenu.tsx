@@ -5,10 +5,16 @@ import type { Route } from "next";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, Gift, Globe2, HelpCircle, Pin, Search, Settings, ShieldCheck } from "lucide-react";
 import { toast } from "@/lib/toast";
-// TODO Phase 11: replace MOCK_USER with real user/profile/balance props
-import { MOCK_USER, creditPercent } from "@/lib/mock/user";
 
 export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics";
+
+export type ProjectMenuUser = {
+  initials: string;
+  workspace: string;
+  plan: string;
+  credits: number;
+  maxCredits: number;
+};
 
 const MENU_ITEMS = [
   { label: "Dashboard", icon: Globe2, href: "/dashboard" },
@@ -43,13 +49,17 @@ export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void })
   );
 }
 
-export function ProjectMenu() {
+export function ProjectMenu({ user }: { user: ProjectMenuUser }) {
+  const creditPercent = user.maxCredits > 0
+    ? `${Math.round((user.credits / user.maxCredits) * 100)}%`
+    : "0%";
+
   return (
     <div className="project-menu">
       <div className="menu-account">
-        <span className="avatar">{MOCK_USER.initials}</span>
-        <strong>{MOCK_USER.workspace}</strong>
-        <span className="pro-badge">{MOCK_USER.plan.toUpperCase()}</span>
+        <span className="avatar">{user.initials}</span>
+        <strong>{user.workspace}</strong>
+        <span className="pro-badge">{user.plan.toUpperCase()}</span>
       </div>
       <div className="project-health">
         <div>
@@ -64,10 +74,10 @@ export function ProjectMenu() {
       <div className="credits-card">
         <div className="flex items-center justify-between">
           <strong>Credits</strong>
-          <span>{MOCK_USER.credits.toLocaleString()} left</span>
+          <span>{user.credits.toLocaleString()} left</span>
         </div>
         <div className="credit-meter">
-          <span style={{ width: creditPercent() }} />
+          <span style={{ width: creditPercent }} />
         </div>
       </div>
       <button className="menu-row accent" onClick={() => toast("Free credits — coming soon")} type="button">

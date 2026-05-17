@@ -4,8 +4,8 @@
 > After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Status**: UI/UX gate passed. All frontend phases complete. Backend work begins here.
-> **Current phase**: Phase 10 — Platform Supabase Schema + Real Auth
+> **Status**: Phases 10 and 11 complete and verified. UI/UX cleanup complete.
+> **Current phase**: Phase 12 — Fly.io Machine + Live Preview
 
 ---
 
@@ -16,622 +16,623 @@ Do not re-open these phases.
 
 ---
 
-## ── PHASE 10 ── Platform Supabase Schema + Real Auth
+## ── COMPLETED ── Phase 10 — Platform Supabase Schema + Real Auth
 
-**Goal**: Replace MockAuthContext with real Supabase Auth. Wire signup/login.
-Create the full platform DB schema. Protect routes with middleware.
+All tasks complete. Verified in production Supabase project.
 
-**Pre-requisites** (must be done by the project owner before Codex runs this phase):
-- Supabase project created at supabase.com
-- `.env.local` populated with:
-  ```
-  NEXT_PUBLIC_SUPABASE_URL=https://[ref].supabase.co
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...
-  SUPABASE_SERVICE_ROLE_KEY=eyJ...
-  ```
-
----
-
-### 10.1 — Install Supabase packages
-
-- [ ] Run:
-  ```bash
-  pnpm add @supabase/supabase-js @supabase/ssr
-  ```
-- [ ] Verify no version conflicts: `pnpm typecheck` passes before continuing.
+**What was done:**
+- [x] Installed `@supabase/supabase-js` + `@supabase/ssr`
+- [x] Created `lib/supabase/client.ts` (browser) and `lib/supabase/server.ts` (server)
+- [x] Created `middleware.ts` with protected paths + auth redirects
+- [x] Ran all 11 DB schema blocks in Supabase SQL editor (profiles, projects, messages, agent_runs, model_pricing, credit_transactions, review_runs, review_findings, security_scans, security_findings, analytics_events, project_snapshots, triggers)
+- [x] `user_credit_balance` view with `security_invoker = true`
+- [x] `handle_new_user()` trigger — auto-creates profile + 5 credit signup bonus
+- [x] Removed `MockAuthContext` and `AuthGuard`
+- [x] Wired signup/login/logout to Supabase Auth
+- [x] Created all API route stubs (projects, messages, agent-runs, credits, models)
+- [x] `GET /api/models` returns live model list from `model_pricing` table
 
 ---
 
-### 10.2 — Create Supabase browser client
+## ── COMPLETED ── Phase 11 — AI Streaming (Anthropic + OpenAI + Google)
 
-- [ ] Create `lib/supabase/client.ts`:
-  ```typescript
-  import { createBrowserClient } from '@supabase/ssr'
+All tasks complete. Verified with real API keys.
 
-  export function createClient() {
-    return createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
-    )
-  }
-  ```
-
----
-
-### 10.3 — Create Supabase server client
-
-- [ ] Create `lib/supabase/server.ts`:
-  ```typescript
-  import { createServerClient } from '@supabase/ssr'
-  import { cookies } from 'next/headers'
-
-  export async function createClient() {
-    const cookieStore = await cookies()
-    return createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: (cookiesToSet) =>
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            ),
-        },
-      }
-    )
-  }
-  ```
+**What was done:**
+- [x] Installed `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google`, `ai`
+- [x] Created `lib/ai/providers.ts` — `resolveModel()` registry, null on missing key
+- [x] Created `lib/ai/system-prompt.ts` — 3-layer security + quality + dynamic context prompt
+- [x] Created `lib/ai/artifact-parser.ts` — `parseArtifacts()`, `hasArtifact()`, `extractPreamble()`
+- [x] Created `lib/ai/context-manager.ts` — 8-message verbatim window, summarize older
+- [x] Created `lib/ai/credit-estimator.ts` — heuristic estimate, empty prompt guard
+- [x] Created `lib/credits/calculate.ts` — `getBalance()`, `holdCredits()`, `finalizeCredits()`
+- [x] Implemented `app/api/chat/route.ts` — auth → project → model → credit check → hold → stream → finalize
+- [x] Updated `ChatPanel.tsx` — `useChat()` with `DefaultChatTransport`, real send/stream/stop
+- [x] Updated `MessageItem.tsx` — handles `UIMessage` parts array + `MockMessage` union
+- [x] Updated `ArtifactCard.tsx` — handles `ParsedArtifact[]` + `MockArtifact[]` union
+- [x] Messages saved to Supabase after each turn (user + assistant)
+- [x] Credit hold → deduct → refund cycle verified in `credit_transactions`
+- [x] `agent_runs` status updated to `completed` with token counts
 
 ---
 
-### 10.4 — Create root middleware for auth protection
+## ── COMPLETED ── Phase 11b — Mock Data Cleanup + UI Fixes
 
-- [ ] Create `middleware.ts` at the project root:
-  ```typescript
-  import { createServerClient } from '@supabase/ssr'
-  import { NextResponse, type NextRequest } from 'next/server'
+Done manually this session (not by Codex).
 
-  export async function middleware(request: NextRequest) {
-    let supabaseResponse = NextResponse.next({ request })
-
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-      {
-        cookies: {
-          getAll: () => request.cookies.getAll(),
-          setAll: (cookiesToSet) => {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              request.cookies.set(name, value)
-            )
-            supabaseResponse = NextResponse.next({ request })
-            cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options)
-            )
-          },
-        },
-      }
-    )
-
-    // Use getClaims() NOT getSession() — getSession() is not safe server-side
-    const { data: { user } } = await supabase.auth.getUser()
-
-    const { pathname } = request.nextUrl
-
-    const protectedPaths = ['/dashboard', '/new', '/builder', '/settings']
-    const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
-
-    if (isProtected && !user) {
-      const loginUrl = request.nextUrl.clone()
-      loginUrl.pathname = '/login'
-      return NextResponse.redirect(loginUrl)
-    }
-
-    // Redirect logged-in users away from auth pages
-    if (user && (pathname === '/login' || pathname === '/signup')) {
-      const newUrl = request.nextUrl.clone()
-      newUrl.pathname = '/new'
-      return NextResponse.redirect(newUrl)
-    }
-
-    return supabaseResponse
-  }
-
-  export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhooks).*)'],
-  }
-  ```
+**What was done:**
+- [x] `app/(app)/dashboard/page.tsx` — real Supabase project fetch, fixed `nativeButton={false}`, fixed routes (`/new` → `/`, `/builder/` → `/project/`)
+- [x] `app/(app)/settings/page.tsx` — server component fetching real profile + balance + transactions
+- [x] `components/settings/sections/AccountSection.tsx` — real editable name (saves to `profiles.full_name`), real password reset, plan badge
+- [x] `components/settings/sections/BillingSection.tsx` — complete redesign: real balance/stats/transaction history, no `MOCK_CREDIT_USAGE`
+- [x] `components/settings/SettingsMock.tsx` — accepts and forwards real user/balance props
+- [x] `components/builder/ProjectMenu.tsx` — accepts `ProjectMenuUser` props, no `MOCK_USER`
+- [x] `components/builder/BuilderMock.tsx` — accepts and forwards `user` prop to `ProjectMenu`
+- [x] `app/(builder)/project/[projectId]/page.tsx` — fetches profile + balance in parallel, passes real `ProjectMenuUser`
+- [x] Deleted `app/(builder)/builder/` (old mock-data route)
+- [x] Fixed all `router.push("/new")` → `router.push("/")` across 5 files
+- [x] `components/marketing/Navbar.tsx` — "Start Building" opens auth modal instead of dead `/new` route
+- [x] `components/shared/ModelPicker.tsx` — two-level dropdown (provider → models), real PNGs for Anthropic/OpenAI/Gemini logos
+- [x] `lib/mock/data.ts` — updated model list: Opus 4.7/4.6/4.5, Sonnet 4.6/4.5, Haiku 4.5, GPT-5.5/5.4/5.3-Codex, Gemini 3.1 Pro
+- [x] `components/shared/PromptToolbar.tsx` — uses `ModelPicker` instead of `<select>`
 
 ---
 
-### 10.5 — Run database schema in Supabase SQL editor
+## ── PHASE 12 ── Fly.io Machine + Live Preview
 
-Copy and run each block in order in the Supabase dashboard → SQL Editor.
+**Goal**: Every project gets a real Node.js execution environment on Fly.io.
+When the AI generates files and shell commands via the artifact parser, they are executed on the
+user's Fly.io machine. The running dev server is proxied into the builder preview iframe.
+This replaces the placeholder `PreviewPanel` and static `FilesPanel`.
 
-- [ ] **Block 1: profiles**
-  ```sql
-  create table public.profiles (
-    id uuid references auth.users(id) on delete cascade primary key,
-    full_name text,
-    avatar_url text,
-    plan text default 'free' check (plan in ('free','starter','pro','teams')),
-    fly_machine_id text,
-    fly_app_name text,
-    supabase_project_ref text,
-    supabase_project_url text,
-    supabase_anon_key text,
-    supabase_service_role_key text,
-    created_at timestamptz default now()
-  );
-  alter table public.profiles enable row level security;
-  create policy "users own their profile"
-    on public.profiles for all using (auth.uid() = id);
-  ```
-
-- [ ] **Block 2: projects**
-  ```sql
-  create table public.projects (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid references auth.users(id) on delete cascade not null,
-    name text not null,
-    description text,
-    type text not null check (type in ('fullstack','mobile','landing')),
-    framework text not null check (framework in ('nextjs','expo','static')),
-    status text default 'draft' check (status in ('draft','building','live','error')),
-    backend_mode text default 'managed_supabase'
-      check (backend_mode in ('managed_supabase','own_supabase','decide_later')),
-    fly_port integer,
-    db_schema text,
-    deploy_url text,
-    github_url text,
-    vercel_project_id text,
-    design_style text,
-    primary_color text,
-    dark_mode text default 'light',
-    forked_from uuid references public.projects(id),
-    is_public boolean default false,
-    created_at timestamptz default now(),
-    updated_at timestamptz default now()
-  );
-  alter table public.projects enable row level security;
-  create policy "users own their projects"
-    on public.projects for all using (auth.uid() = user_id);
-  ```
-
-- [ ] **Block 3: project_briefs**
-  ```sql
-  create table public.project_briefs (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid references public.projects(id) on delete cascade not null,
-    user_id uuid references auth.users(id) on delete cascade not null,
-    initial_prompt text not null,
-    answers jsonb not null,
-    prd jsonb not null,
-    estimated_credits numeric(10,4) not null default 0,
-    approved_at timestamptz,
-    created_at timestamptz default now(),
-    updated_at timestamptz default now()
-  );
-  alter table public.project_briefs enable row level security;
-  create policy "users own their project briefs"
-    on public.project_briefs for all using (auth.uid() = user_id);
-  ```
-
-- [ ] **Block 4: messages**
-  ```sql
-  create table public.messages (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid references public.projects(id) on delete cascade not null,
-    role text not null check (role in ('user','assistant','system')),
-    content text not null,
-    model_id text,
-    credits_used numeric(10,4) default 0,
-    created_at timestamptz default now()
-  );
-  alter table public.messages enable row level security;
-  create policy "users own their messages"
-    on public.messages for all
-    using (exists (
-      select 1 from public.projects
-      where id = messages.project_id and user_id = auth.uid()
-    ));
-  ```
-
-- [ ] **Block 5: agent_runs**
-  ```sql
-  create table public.agent_runs (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid references public.projects(id) on delete cascade not null,
-    user_id uuid references auth.users(id) on delete cascade not null,
-    project_brief_id uuid references public.project_briefs(id),
-    parent_message_id uuid references public.messages(id),
-    status text default 'queued'
-      check (status in ('queued','planning','building','reviewing','scanning','completed','failed','cancelled')),
-    prompt text not null,
-    model_provider text not null default 'anthropic'
-      check (model_provider in ('anthropic','openai','google')),
-    model_id text not null default 'claude-sonnet-4-5',
-    model_label text not null default 'Claude Sonnet 4.5',
-    plan jsonb,
-    changed_files jsonb default '[]'::jsonb,
-    commands jsonb default '[]'::jsonb,
-    estimated_credits numeric(10,4) not null default 0,
-    held_credits numeric(10,4) not null default 0,
-    final_credits numeric(10,4) not null default 0,
-    tokens_input int,
-    tokens_output int,
-    started_at timestamptz default now(),
-    finished_at timestamptz
-  );
-  alter table public.agent_runs enable row level security;
-  create policy "users own their agent runs"
-    on public.agent_runs for all using (auth.uid() = user_id);
-  ```
-
-- [ ] **Block 6: model_pricing**
-  ```sql
-  create table public.model_pricing (
-    model_id               text primary key,
-    display_name           text not null,
-    provider               text not null check (provider in ('anthropic','openai','google')),
-    credits_per_1m_input   numeric(8,4) not null,
-    credits_per_1m_output  numeric(8,4) not null,
-    min_plan               text not null check (min_plan in ('free','starter','pro','teams')),
-    is_active              boolean default true
-  );
-  -- Public read (no auth required to fetch model list)
-  alter table public.model_pricing enable row level security;
-  create policy "anyone can read model pricing"
-    on public.model_pricing for select using (true);
-
-  -- Seed: 1 credit = $0.17 USD
-  insert into public.model_pricing values
-    ('claude-haiku-4-5',    'Claude Haiku 4.5',     'anthropic', 5.88,  29.41, 'free',    true),
-    ('claude-sonnet-4-5',   'Claude Sonnet 4.5',    'anthropic', 17.65, 88.24, 'free',    true),
-    ('claude-sonnet-4-6',   'Claude Sonnet 4.6',    'anthropic', 17.65, 88.24, 'free',    true),
-    ('claude-opus-4-5',     'Claude Opus 4.5',      'anthropic', 29.41, 147.06,'starter', true),
-    ('gpt-4-1-nano',        'GPT-4.1 Nano',         'openai',    0.59,  2.35,  'free',    true),
-    ('gpt-5-4-mini',        'GPT-5.4 Mini',         'openai',    4.41,  26.47, 'starter', true),
-    ('gpt-5-4-standard',    'GPT-5.4 Standard',     'openai',    14.71, 88.24, 'pro',     true),
-    ('gpt-5-5',             'GPT-5.5',              'openai',    29.41, 176.47,'teams',   true),
-    ('o3',                  'o3',                   'openai',    11.76, 47.06, 'pro',     true),
-    ('gemini-2-5-flash',    'Gemini 2.5 Flash',     'google',    1.76,  14.71, 'free',    true),
-    ('gemini-2-5-pro',      'Gemini 2.5 Pro',       'google',    7.35,  58.82, 'starter', true);
-  ```
-
-- [ ] **Block 7: credit_transactions**
-  ```sql
-  create table public.credit_transactions (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid references auth.users(id) on delete cascade not null,
-    project_id uuid references public.projects(id),
-    agent_run_id uuid references public.agent_runs(id),
-    run_id uuid,
-    type text not null
-      check (type in ('purchase','hold','deduct','refund','bonus','expire','monthly_reset')),
-    amount numeric(10,4) not null,
-    model_id text,
-    tokens_input int,
-    tokens_output int,
-    price_paid_usd numeric(8,2),
-    stripe_session_id text,
-    metadata jsonb default '{}'::jsonb,
-    created_at timestamptz default now()
-  );
-  alter table public.credit_transactions enable row level security;
-  create policy "users own their transactions"
-    on public.credit_transactions for all using (auth.uid() = user_id);
-
-  create view public.user_credit_balance as
-    select user_id, sum(amount) as balance
-    from public.credit_transactions
-    group by user_id;
-  ```
-
-- [ ] **Block 8: review_runs + review_findings**
-  ```sql
-  create table public.review_runs (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid references public.projects(id) on delete cascade not null,
-    agent_run_id uuid references public.agent_runs(id) on delete cascade,
-    score integer check (score between 0 and 100),
-    status text default 'pending'
-      check (status in ('pending','passed','passed_with_risks','failed')),
-    summary text,
-    credits_used numeric(10,4) default 0,
-    created_at timestamptz default now()
-  );
-  alter table public.review_runs enable row level security;
-  create policy "users own their review runs"
-    on public.review_runs for all
-    using (exists (select 1 from public.projects where id = review_runs.project_id and user_id = auth.uid()));
-
-  create table public.review_findings (
-    id uuid primary key default gen_random_uuid(),
-    review_run_id uuid references public.review_runs(id) on delete cascade not null,
-    severity text not null check (severity in ('blocker','risk','suggestion','passed')),
-    category text not null,
-    file_path text,
-    line_number integer,
-    title text not null,
-    details text,
-    status text default 'open' check (status in ('open','fixed','accepted','dismissed')),
-    created_at timestamptz default now()
-  );
-  alter table public.review_findings enable row level security;
-  create policy "users own their review findings"
-    on public.review_findings for all
-    using (exists (
-      select 1 from public.review_runs rr
-      join public.projects p on p.id = rr.project_id
-      where rr.id = review_findings.review_run_id and p.user_id = auth.uid()
-    ));
-  ```
-
-- [ ] **Block 9: security_scans + security_findings**
-  ```sql
-  create table public.security_scans (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid references public.projects(id) on delete cascade not null,
-    agent_run_id uuid references public.agent_runs(id) on delete cascade,
-    status text default 'pending'
-      check (status in ('pending','clean','needs_attention','blocked','failed')),
-    scanner_version text,
-    credits_used numeric(10,4) default 0,
-    created_at timestamptz default now()
-  );
-  alter table public.security_scans enable row level security;
-  create policy "users own their security scans"
-    on public.security_scans for all
-    using (exists (select 1 from public.projects where id = security_scans.project_id and user_id = auth.uid()));
-
-  create table public.security_findings (
-    id uuid primary key default gen_random_uuid(),
-    security_scan_id uuid references public.security_scans(id) on delete cascade not null,
-    severity text not null check (severity in ('critical','high','medium','low','info')),
-    category text not null,
-    file_path text,
-    line_number integer,
-    title text not null,
-    details text,
-    fix_prompt text,
-    status text default 'open' check (status in ('open','fixed','accepted_risk','dismissed')),
-    created_at timestamptz default now()
-  );
-  alter table public.security_findings enable row level security;
-  create policy "users own their security findings"
-    on public.security_findings for all
-    using (exists (
-      select 1 from public.security_scans ss
-      join public.projects p on p.id = ss.project_id
-      where ss.id = security_findings.security_scan_id and p.user_id = auth.uid()
-    ));
-  ```
-
-- [ ] **Block 10: analytics_events + project_snapshots**
-  ```sql
-  create table public.analytics_events (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid references auth.users(id) on delete cascade,
-    project_id uuid references public.projects(id) on delete cascade,
-    source text not null check (source in ('platform','generated_app')),
-    event_name text not null,
-    properties jsonb default '{}'::jsonb,
-    session_id text,
-    created_at timestamptz default now()
-  );
-  alter table public.analytics_events enable row level security;
-  create policy "users own their analytics events"
-    on public.analytics_events for all
-    using (
-      auth.uid() = user_id or
-      exists (select 1 from public.projects where id = analytics_events.project_id and user_id = auth.uid())
-    );
-
-  create table public.project_snapshots (
-    id uuid primary key default gen_random_uuid(),
-    project_id uuid references public.projects(id) on delete cascade not null,
-    file_tree jsonb not null,
-    taken_at timestamptz default now()
-  );
-  alter table public.project_snapshots enable row level security;
-  create policy "users own their snapshots"
-    on public.project_snapshots for all
-    using (exists (select 1 from public.projects where id = project_snapshots.project_id and user_id = auth.uid()));
-  ```
-
-- [ ] **Block 11: profile auto-create trigger**
-  ```sql
-  -- Auto-create profile row when a user signs up
-  create or replace function public.handle_new_user()
-  returns trigger as $$
-  begin
-    insert into public.profiles (id, full_name, avatar_url)
-    values (
-      new.id,
-      new.raw_user_meta_data->>'full_name',
-      new.raw_user_meta_data->>'avatar_url'
-    );
-    -- Give new users 5 free credits
-    insert into public.credit_transactions (user_id, type, amount, metadata)
-    values (new.id, 'bonus', 5, '{"reason": "signup_bonus"}'::jsonb);
-    return new;
-  end;
-  $$ language plpgsql security definer;
-
-  create trigger on_auth_user_created
-    after insert on auth.users
-    for each row execute procedure public.handle_new_user();
-  ```
-
----
-
-### 10.6 — Remove MockAuthContext, replace with real Supabase Auth
-
-- [ ] Delete `context/MockAuthContext.tsx` entirely.
-- [ ] Delete `components/shared/AuthGuard.tsx` entirely.
-- [ ] In `app/layout.tsx`:
-  - Remove `import { MockAuthProvider }` and `<MockAuthProvider>` wrapper.
-  - The layout should just render `{children}` inside `<body>` (middleware handles auth).
-  - Keep `<Toaster />` from Sonner.
-
----
-
-### 10.7 — Wire signup form to Supabase
-
-- [ ] In `app/(auth)/signup/page.tsx` (or wherever the signup form lives):
-  ```typescript
-  'use client'
-  import { createClient } from '@/lib/supabase/client'
-  import { useRouter } from 'next/navigation'
-
-  // On form submit:
-  const supabase = createClient()
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { full_name: name } },
-  })
-  if (error) { /* show error toast */ return }
-  router.push('/new')
-  ```
-- [ ] Show `toast.error(error.message)` on failure.
-- [ ] Show `toast.success("Account created!")` on success.
-- [ ] Button shows spinner while submitting (disabled during async).
-
----
-
-### 10.8 — Wire login form to Supabase
-
-- [ ] In `app/(auth)/login/page.tsx`:
-  ```typescript
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) { toast.error(error.message); return }
-  router.push('/new')
-  ```
-- [ ] Same spinner + toast pattern as signup.
-
----
-
-### 10.9 — Wire logout
-
-- [ ] In `components/layout/AppShell.tsx` (or wherever the user menu is):
-  ```typescript
-  const supabase = createClient()
-  await supabase.auth.signOut()
-  router.push('/login')
-  ```
-- [ ] Wire to the "Sign out" menu item or button.
-
----
-
-### 10.10 — Replace mock user with real session data
-
-- [ ] In `components/layout/AppShell.tsx`:
-  - Replace `MOCK_USER` with real data. Fetch in the server component or pass as prop:
-    ```typescript
-    // In app/(app)/layout.tsx (server component):
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('full_name, plan')
-      .eq('id', user!.id)
-      .single()
-    const { data: balanceRow } = await supabase
-      .from('user_credit_balance')
-      .select('balance')
-      .eq('user_id', user!.id)
-      .single()
-    ```
-  - Pass `user`, `profile`, `balance` as props to `AppShell`.
-  - Display real name, plan, and credit balance.
-  - If `profile` is null (new user, trigger hasn't fired yet): show loading state, not crash.
-
----
-
-### 10.11 — Create API route stubs (typed, auth-checked, empty bodies)
-
-Create each file. Each must: verify auth with `supabase.auth.getUser()`, return 401 if no user, return 200 with `{ data: null }` placeholder. No real logic yet — that's Phase 11+.
-
-- [ ] `app/api/projects/route.ts` — GET (list), POST (create)
-- [ ] `app/api/projects/[id]/route.ts` — GET, PATCH, DELETE
-- [ ] `app/api/projects/[id]/brief/route.ts` — GET, POST
-- [ ] `app/api/projects/[id]/brief/approve/route.ts` — POST
-- [ ] `app/api/projects/[id]/messages/route.ts` — GET, POST
-- [ ] `app/api/projects/[id]/agent-runs/route.ts` — GET, POST
-- [ ] `app/api/credits/route.ts` — GET balance
-- [ ] `app/api/credits/estimate/route.ts` — POST estimate
-- [ ] `app/api/models/route.ts` — GET active model list from `model_pricing` table (public, no auth required)
-
-**Pattern for each stub:**
-```typescript
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
-
-export async function GET(req: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  return NextResponse.json({ data: null })
-}
+**Pre-requisites** (must be in `.env.local` before Codex runs this phase):
+```
+FLY_API_TOKEN=fo1_...          ← Fly.io personal access token (fly.io → Account → Access Tokens)
+FLY_APP_NAME=wildca-ke         ← The Fly.io app name to provision machines under (create it first: `fly apps create wildca-ke`)
+FLY_ORG_SLUG=personal          ← Your Fly.io org slug (usually "personal")
 ```
 
 ---
 
-### 10.12 — Create `GET /api/models` (real, not a stub)
+### 12.1 — Store Fly machine ID on project, not profile
 
-This endpoint is needed by the model picker in the chat UI (Phase 11).
+The existing `profiles` table has `fly_machine_id` — but each **project** needs its own machine.
 
-- [ ] In `app/api/models/route.ts`:
+- [ ] Run in Supabase SQL editor:
+  ```sql
+  alter table public.projects
+    add column if not exists fly_machine_id text,
+    add column if not exists fly_machine_status text default 'stopped'
+      check (fly_machine_status in ('created','starting','started','stopping','stopped','destroying','destroyed'));
+  ```
+- [ ] Verify `pnpm typecheck` still passes.
+
+---
+
+### 12.2 — Create `lib/fly/client.ts` — Fly.io Machines API wrapper
+
+- [ ] Create `lib/fly/client.ts`:
+  ```typescript
+  // SERVER ONLY — never import in client components
+  const FLY_API_BASE = 'https://api.machines.dev/v1'
+  const FLY_APP_NAME = process.env.FLY_APP_NAME!
+  const FLY_API_TOKEN = process.env.FLY_API_TOKEN!
+
+  function headers() {
+    return {
+      Authorization: `Bearer ${FLY_API_TOKEN}`,
+      'Content-Type': 'application/json',
+    }
+  }
+
+  export interface FlyMachine {
+    id: string
+    name: string
+    state: string
+    region: string
+    private_ip: string
+  }
+
+  // Provision a new machine. Image: node:20-slim. 1 CPU, 512MB RAM.
+  export async function createMachine(projectId: string): Promise<FlyMachine> {
+    const res = await fetch(`${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        name: `project-${projectId.slice(0, 8)}`,
+        config: {
+          image: 'node:20-slim',
+          guest: { cpu_kind: 'shared', cpus: 1, memory_mb: 512 },
+          auto_destroy: false,
+          restart: { policy: 'no' },
+          env: { PROJECT_ID: projectId },
+          services: [
+            {
+              ports: [{ port: 3000, handlers: ['http'] }],
+              protocol: 'tcp',
+              internal_port: 3000,
+            },
+          ],
+        },
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error(`Fly create machine failed: ${err}`)
+    }
+    return res.json() as Promise<FlyMachine>
+  }
+
+  export async function startMachine(machineId: string): Promise<void> {
+    await fetch(`${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines/${machineId}/start`, {
+      method: 'POST',
+      headers: headers(),
+    })
+  }
+
+  export async function stopMachine(machineId: string): Promise<void> {
+    await fetch(`${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines/${machineId}/stop`, {
+      method: 'POST',
+      headers: headers(),
+    })
+  }
+
+  export async function getMachine(machineId: string): Promise<FlyMachine> {
+    const res = await fetch(`${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines/${machineId}`, {
+      headers: headers(),
+    })
+    if (!res.ok) throw new Error(`Fly get machine failed: ${res.status}`)
+    return res.json() as Promise<FlyMachine>
+  }
+
+  // Execute a command inside the machine and return stdout/stderr
+  export async function execOnMachine(
+    machineId: string,
+    command: string[],
+    cwd = '/app'
+  ): Promise<{ stdout: string; stderr: string; exit_code: number }> {
+    const res = await fetch(`${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines/${machineId}/exec`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ command, cwd, timeout: 30 }),
+    })
+    if (!res.ok) throw new Error(`Fly exec failed: ${res.status}`)
+    return res.json() as Promise<{ stdout: string; stderr: string; exit_code: number }>
+  }
+
+  // Write a single file to the machine via exec + base64
+  export async function writeFile(
+    machineId: string,
+    filePath: string,
+    content: string
+  ): Promise<void> {
+    const encoded = Buffer.from(content).toString('base64')
+    const dir = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '/app'
+    await execOnMachine(machineId, ['sh', '-c', `mkdir -p ${dir} && echo "${encoded}" | base64 -d > ${filePath}`])
+  }
+
+  // List files in /app on the machine
+  export async function listFiles(machineId: string): Promise<string[]> {
+    const result = await execOnMachine(machineId, ['find', '/app', '-type', 'f', '-not', '-path', '*/node_modules/*'])
+    return result.stdout.split('\n').filter(Boolean).map((f) => f.replace('/app/', ''))
+  }
+  ```
+
+---
+
+### 12.3 — Machine lifecycle API routes
+
+- [ ] Create `app/api/fly/machine/route.ts` (POST — provision or return existing):
   ```typescript
   import { createClient } from '@/lib/supabase/server'
   import { NextResponse } from 'next/server'
+  import { createMachine, startMachine, getMachine } from '@/lib/fly/client'
 
-  export async function GET() {
+  export async function POST(req: Request) {
     const supabase = await createClient()
-    const { data, error } = await supabase
-      .from('model_pricing')
-      .select('model_id, display_name, provider, min_plan, credits_per_1m_input, credits_per_1m_output')
-      .eq('is_active', true)
-      .order('provider')
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ data })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { projectId } = await req.json() as { projectId: string }
+    if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
+
+    // Verify user owns this project
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id, fly_machine_id, fly_machine_status')
+      .eq('id', projectId)
+      .eq('user_id', user.id)
+      .single()
+    if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+    // If machine already exists, start it and return
+    if (project.fly_machine_id) {
+      try {
+        await startMachine(project.fly_machine_id)
+        const machine = await getMachine(project.fly_machine_id)
+        await supabase.from('projects').update({ fly_machine_status: machine.state }).eq('id', projectId)
+        return NextResponse.json({ data: machine })
+      } catch {
+        // Machine might be deleted — fall through to create a new one
+      }
+    }
+
+    // Provision a new machine
+    const machine = await createMachine(projectId)
+    await supabase.from('projects')
+      .update({ fly_machine_id: machine.id, fly_machine_status: machine.state })
+      .eq('id', projectId)
+
+    return NextResponse.json({ data: machine }, { status: 201 })
   }
   ```
-- [ ] No auth required (model pricing is public).
+
+- [ ] Create `app/api/fly/machine/[machineId]/start/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+  import { startMachine } from '@/lib/fly/client'
+
+  export async function POST(_req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    await startMachine(machineId)
+    return NextResponse.json({ ok: true })
+  }
+  ```
+
+- [ ] Create `app/api/fly/machine/[machineId]/stop/route.ts` — same pattern but calls `stopMachine(machineId)`.
+
+- [ ] Create `app/api/fly/machine/[machineId]/status/route.ts`:
+  ```typescript
+  import { NextResponse } from 'next/server'
+  import { getMachine } from '@/lib/fly/client'
+
+  export async function GET(_req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params
+    const machine = await getMachine(machineId)
+    return NextResponse.json({ data: { state: machine.state, private_ip: machine.private_ip } })
+  }
+  ```
 
 ---
 
-### 10.13 — Verification
+### 12.4 — File write + exec API routes
 
-- [ ] `pnpm typecheck` — zero errors.
+- [ ] Create `app/api/fly/machine/[machineId]/files/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+  import { writeFile, listFiles } from '@/lib/fly/client'
+
+  // GET — list all files on machine
+  export async function GET(_req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const files = await listFiles(machineId)
+    return NextResponse.json({ data: files })
+  }
+
+  // POST — write one or more files
+  // Body: { files: Array<{ path: string; content: string }> }
+  export async function POST(req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { files } = await req.json() as { files: Array<{ path: string; content: string }> }
+    if (!Array.isArray(files) || !files.length) {
+      return NextResponse.json({ error: 'files array required' }, { status: 400 })
+    }
+
+    // Write sequentially to avoid race conditions
+    for (const file of files) {
+      await writeFile(machineId, `/app/${file.path}`, file.content)
+    }
+
+    return NextResponse.json({ ok: true, count: files.length })
+  }
+  ```
+
+- [ ] Create `app/api/fly/machine/[machineId]/exec/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+  import { execOnMachine } from '@/lib/fly/client'
+
+  // POST — run a shell command
+  // Body: { command: string }  e.g. "npm install"
+  export async function POST(req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { command } = await req.json() as { command: string }
+    if (!command) return NextResponse.json({ error: 'command required' }, { status: 400 })
+
+    const result = await execOnMachine(machineId, ['sh', '-c', command])
+    return NextResponse.json({ data: result })
+  }
+  ```
+
+---
+
+### 12.5 — Create `lib/fly/action-runner.ts` — execute artifact actions
+
+After the AI stream completes and artifacts are parsed, this runner applies them to the Fly.io machine.
+
+- [ ] Create `lib/fly/action-runner.ts`:
+  ```typescript
+  import type { ParsedArtifact, ParsedAction } from '@/lib/ai/artifact-parser'
+
+  export type ActionResult = {
+    action: ParsedAction
+    ok: boolean
+    output?: string
+    error?: string
+  }
+
+  // Runs all actions from parsed artifacts against the user's machine via API routes.
+  // Returns results for each action so the UI can display progress.
+  export async function runArtifactActions(
+    machineId: string,
+    artifacts: ParsedArtifact[],
+    onProgress?: (result: ActionResult) => void
+  ): Promise<ActionResult[]> {
+    const results: ActionResult[] = []
+
+    for (const artifact of artifacts) {
+      // Batch file writes — send in one request
+      const fileActions = artifact.actions.filter((a) => a.type === 'file')
+      if (fileActions.length > 0) {
+        try {
+          const res = await fetch(`/api/fly/machine/${machineId}/files`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              files: fileActions.map((a) => ({ path: a.filePath ?? 'unknown', content: a.content })),
+            }),
+          })
+          for (const action of fileActions) {
+            const result: ActionResult = { action, ok: res.ok }
+            results.push(result)
+            onProgress?.(result)
+          }
+        } catch (err) {
+          for (const action of fileActions) {
+            const result: ActionResult = { action, ok: false, error: String(err) }
+            results.push(result)
+            onProgress?.(result)
+          }
+        }
+      }
+
+      // Shell + start commands — run sequentially
+      const shellActions = artifact.actions.filter((a) => a.type === 'shell' || a.type === 'start')
+      for (const action of shellActions) {
+        try {
+          const res = await fetch(`/api/fly/machine/${machineId}/exec`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: action.content }),
+          })
+          const json = await res.json() as { data?: { stdout: string; stderr: string; exit_code: number } }
+          const result: ActionResult = {
+            action,
+            ok: res.ok && (json.data?.exit_code ?? 0) === 0,
+            output: json.data?.stdout,
+            error: json.data?.stderr,
+          }
+          results.push(result)
+          onProgress?.(result)
+        } catch (err) {
+          const result: ActionResult = { action, ok: false, error: String(err) }
+          results.push(result)
+          onProgress?.(result)
+        }
+      }
+    }
+
+    return results
+  }
+  ```
+
+---
+
+### 12.6 — Wire ActionRunner into `ChatPanel.tsx`
+
+After the AI stream finishes (`status` transitions from `'streaming'` to `'ready'`), parse the last assistant message and run the actions.
+
+- [ ] In `components/builder/ChatPanel.tsx`:
+  - Add prop: `machineId: string | null`
+  - Import `parseArtifacts` from `@/lib/ai/artifact-parser`
+  - Import `runArtifactActions` from `@/lib/fly/action-runner`
+  - Add state: `const [running, setRunning] = useState(false)`
+  - Add `useEffect` that watches `status`:
+    ```typescript
+    useEffect(() => {
+      if (status !== 'ready' || !machineId || !messages.length) return
+      const last = messages[messages.length - 1]
+      if (last?.role !== 'assistant') return
+      const text = last.parts.find((p) => p.type === 'text')?.text ?? ''
+      const artifacts = parseArtifacts(text)
+      if (!artifacts.length) return
+
+      setRunning(true)
+      runArtifactActions(machineId, artifacts).finally(() => {
+        setRunning(false)
+        onTabChange?.('Preview') // switch to preview after actions complete
+      })
+    }, [status, machineId, messages])
+    ```
+  - While `running`: show "Applying changes..." banner above the input
+  - Disable send while `running === true`
+
+- [ ] Pass `machineId` from `BuilderMock.tsx` → `ChatPanel.tsx`.
+- [ ] `BuilderMock.tsx` receives `machineId: string | null` prop (passed from page).
+
+---
+
+### 12.7 — Provision machine on builder page load
+
+- [ ] In `app/(builder)/project/[projectId]/page.tsx`:
+  - After loading the project, check `project.fly_machine_id`
+  - If null: call `POST /api/fly/machine` server-side to provision (or let client do it on mount)
+  - Pass `machineId: project.fly_machine_id ?? null` to `BuilderMock`
+
+  Since provisioning can take ~5s, do it client-side on mount to avoid blocking the page render:
+  - Pass `machineId` as initial prop (may be null)
+  - In `BuilderMock.tsx`, add a `useMachineProvisioner` hook that:
+    - On mount: if `machineId` is null, POST to `/api/fly/machine` with the `projectId`
+    - Shows "Warming up environment..." in the preview panel while provisioning
+    - Sets `machineId` in local state once ready
+
+- [ ] Create `hooks/useMachineProvisioner.ts`:
+  ```typescript
+  'use client'
+  import { useEffect, useState } from 'react'
+
+  export function useMachineProvisioner(projectId: string, initialMachineId: string | null) {
+    const [machineId, setMachineId] = useState<string | null>(initialMachineId)
+    const [provisioning, setProvisioning] = useState(!initialMachineId)
+    const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+      if (initialMachineId) return // already have a machine
+      let cancelled = false
+
+      async function provision() {
+        try {
+          const res = await fetch('/api/fly/machine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId }),
+          })
+          const json = await res.json() as { data?: { id: string }; error?: string }
+          if (cancelled) return
+          if (!res.ok || !json.data) {
+            setError(json.error ?? 'Failed to provision machine')
+            return
+          }
+          setMachineId(json.data.id)
+        } catch (err) {
+          if (!cancelled) setError(String(err))
+        } finally {
+          if (!cancelled) setProvisioning(false)
+        }
+      }
+
+      void provision()
+      return () => { cancelled = true }
+    }, [projectId, initialMachineId])
+
+    return { machineId, provisioning, error }
+  }
+  ```
+
+---
+
+### 12.8 — Update `PreviewPanel.tsx` to show the live machine preview
+
+- [ ] Update `components/builder/panels/PreviewPanel.tsx`:
+  - Accept `machineId: string | null` and `provisioning: boolean` props
+  - If `provisioning`: show a skeleton/spinner with "Warming up your environment..." text
+  - If `machineId` is set: render an `<iframe>` pointing to the machine's preview URL
+    - Preview URL format: `https://${machineId}.vm.${FLY_APP_NAME}.internal:3000`
+    - **Note**: This requires Fly.io private networking. For public access use Fly.io service ports.
+    - For now: show the machine ID and a placeholder iframe with `src="/api/fly/preview/${machineId}"`
+  - If no machine and not provisioning: show "No preview available — send a prompt to start building"
+
+- [ ] Create `app/api/fly/preview/[machineId]/route.ts` — proxy to the machine's dev server:
+  ```typescript
+  import { NextResponse } from 'next/server'
+
+  // Simple proxy — forward requests to the Fly.io machine's internal dev server
+  export async function GET(_req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+    const { machineId } = await params
+    const appName = process.env.FLY_APP_NAME
+    // Machine preview URL — adjust port to match the project's dev server
+    const upstreamUrl = `http://${machineId}.vm.${appName}.internal:3000`
+    try {
+      const res = await fetch(upstreamUrl)
+      const html = await res.text()
+      return new NextResponse(html, {
+        headers: { 'Content-Type': 'text/html' },
+      })
+    } catch {
+      return new NextResponse('<p>Preview not ready yet. The dev server may still be starting.</p>', {
+        headers: { 'Content-Type': 'text/html' },
+        status: 503,
+      })
+    }
+  }
+  ```
+
+---
+
+### 12.9 — Update `FilesPanel.tsx` to show real files
+
+- [ ] Update `components/builder/panels/FilesPanel.tsx`:
+  - Accept `machineId: string | null` prop
+  - On mount (and after each artifact run completes): fetch `GET /api/fly/machine/${machineId}/files`
+  - Display the file tree (replace `MOCK_FILE_TREE` entirely)
+  - Show a spinner while loading
+  - If `machineId` is null: show "Files will appear here after your first generation"
+  - File click: fetch file content via `POST /api/fly/machine/${machineId}/exec` with `cat /app/${path}` and display in a simple code viewer
+
+---
+
+### 12.10 — Auto-stop machine on browser close
+
+- [ ] In `BuilderMock.tsx`:
+  - Add a `beforeunload` event listener that calls `POST /api/fly/machine/${machineId}/stop`
+  - Use `navigator.sendBeacon` for reliability on page close:
+    ```typescript
+    useEffect(() => {
+      if (!machineId) return
+      function onUnload() {
+        navigator.sendBeacon(`/api/fly/machine/${machineId}/stop`)
+      }
+      window.addEventListener('beforeunload', onUnload)
+      return () => window.removeEventListener('beforeunload', onUnload)
+    }, [machineId])
+    ```
+
+---
+
+### 12.11 — Verification
+
+- [ ] `pnpm typecheck` — zero TypeScript errors.
 - [ ] `pnpm dev` — no runtime errors in console.
-- [ ] `/signup` → fill form → submit → profile row appears in Supabase dashboard → redirects to `/new`.
-- [ ] `/login` → sign in with created account → redirects to `/new`.
-- [ ] Visit `/dashboard` while logged out → redirects to `/login`.
-- [ ] Visit `/builder/anything` while logged out → redirects to `/login`.
-- [ ] Sidebar shows real user name and credit balance (5 credits from signup bonus).
-- [ ] `GET /api/models` returns the 11 active models from DB.
-- [ ] Sign out → redirects to `/login`, protected routes redirect again.
-- [ ] No `MockAuthContext` or `AuthGuard` imports remain anywhere in the codebase.
+- [ ] Set `FLY_API_TOKEN`, `FLY_APP_NAME`, `FLY_ORG_SLUG` in `.env.local`.
+- [ ] Open a project in the builder → "Warming up environment..." appears in preview panel.
+- [ ] After ~5s: machine provisioned, `fly_machine_id` saved to `projects` row in Supabase.
+- [ ] Send prompt: "Say hello and create a file called hello.txt with the text 'Hello World'"
+- [ ] After stream: artifact parser detects file action → ActionRunner runs → file written to machine.
+- [ ] `FilesPanel` refreshes and shows `hello.txt` in the file tree.
+- [ ] `GET /api/fly/machine/${machineId}/files` returns the file list.
+- [ ] Send prompt: "Create a simple Next.js app" → `npm install` shell action runs on machine.
+- [ ] Preview panel shows the running dev server (or "Preview not ready" if networking not configured yet).
+- [ ] Close browser tab → machine stops (verify in Fly.io dashboard).
+- [ ] Reopen project → machine starts again from saved `fly_machine_id`.
 
 ---
 
-## ── NEXT ── Phase 11 — AI Streaming (Anthropic + OpenAI + Google)
+## ── NEXT ── Phase 13 — Project Snapshots + Undo
 
-**Begins after Phase 10 verification passes.**
+**Begins after Phase 12 verification passes.**
 
-Key tasks (full detail in PLAN.md Phase 11):
-- Install `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google`
-- Build `lib/ai/system-prompt.ts` (3-layer: security + quality + project context)
-- Build `lib/ai/artifact-parser.ts` (boltArtifact streaming parser)
-- Build `lib/ai/context-manager.ts` (8 messages verbatim + summarize older)
-- Build `lib/credits/calculate.ts` (hold → deduct → refund using model_pricing table)
-- Implement `app/api/chat/route.ts` (multi-provider routing, credit hold, stream, finalize)
-- Wire `useChat()` in `ChatPanel.tsx` to real `/api/chat`
-- Model picker reads from `/api/models`, gated by user's plan
+Key tasks:
+- Auto-snapshot `project_snapshots` table before every AI run (save VFS state)
+- "Undo last change" button in builder that restores previous snapshot to machine
+- Snapshot history drawer showing timeline of changes
+- Fork from snapshot: create new project from any historical state
 
 ---
 
@@ -640,8 +641,11 @@ Key tasks (full detail in PLAN.md Phase 11):
 ### Hard rules
 1. **Never call `supabase.auth.getSession()` server-side** — always use `supabase.auth.getUser()`.
 2. **No frontend credit changes** — credit deduction happens server-side only via API routes.
-3. **No mock data imports in real pages** — `lib/mock/*` is only for UI development, not used in backend routes.
+3. **No mock data imports in real pages** — `lib/mock/*` is only for UI development, not used in backend routes or server components.
 4. **RLS on every table** — every `create table` must be followed by `alter table ... enable row level security` and at least one policy.
-5. **Service role key is server-only** — never import `SUPABASE_SERVICE_ROLE_KEY` in any file inside `app/(marketing)`, `app/(auth)`, or client components.
-6. **Run `pnpm typecheck` after each numbered task** — do not batch multiple tasks before checking.
-7. **Spinner on all async form actions** — disable button + show loading state while Supabase calls are in flight.
+5. **Service role key is server-only** — never import `SUPABASE_SERVICE_ROLE_KEY` in client components or marketing/auth route groups.
+6. **Fly.io API token is server-only** — never expose `FLY_API_TOKEN` to the client. All Fly.io calls go through Next.js API routes.
+7. **Run `pnpm typecheck` after each numbered task** — do not batch multiple tasks before checking.
+8. **Spinner on all async form actions** — disable button + show loading state while async calls are in flight.
+9. **`nativeButton={false}` on all Base UI `<Button render={<Link />}>`** — required to suppress accessibility warnings.
+10. **Machine provisioning is idempotent** — if `fly_machine_id` already exists on the project, start it rather than create a new one.

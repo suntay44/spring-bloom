@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BriefFields } from "./BriefStep";
@@ -16,17 +15,19 @@ type ProjectBriefModalProps = {
   setOpen: (value: boolean) => void;
   setStep: (value: BriefStep) => void;
   step: BriefStep;
+  onApproved?: (projectName: string) => void;
 };
 
 const BACKEND_OPTIONS = [
   { id: "managed", label: "Managed Supabase - we handle it", defaultChecked: true },
   { id: "byo", label: "Connect my own Supabase", defaultChecked: false },
-  { id: "later", label: "Decide later - frontend/mock data first", defaultChecked: false }
+  { id: "later", label: "Decide later - frontend/mock data first", defaultChecked: false },
 ] as const;
 
-export function ProjectBriefModal({ appType, model, prompt, projectId = "healthtech-proto", setOpen, setStep, step }: ProjectBriefModalProps) {
+export function ProjectBriefModal({ appType, model, prompt, setOpen, setStep, step, onApproved }: ProjectBriefModalProps) {
   const next = () => setStep(step < 6 ? ((step + 1) as BriefStep) : step);
   const back = () => setStep(step > 1 ? ((step - 1) as BriefStep) : step);
+  const derivedName = prompt.split(".")[0]?.trim().slice(0, 50) ?? "My App";
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -71,7 +72,10 @@ export function ProjectBriefModal({ appType, model, prompt, projectId = "healtht
         </div>
         <div className="modal-footer">
           <Button disabled={step === 1} onClick={back} type="button" variant="outline">Back</Button>
-          {step < 6 ? <Button onClick={next} type="button">{step === 5 ? "Generate PRD" : "Next"}</Button> : <Button render={<Link href={`/builder/${projectId}`} />}>Start Building <ArrowRight size={17} /></Button>}
+          {step < 6
+            ? <Button onClick={next} type="button">{step === 5 ? "Generate PRD" : "Next"}</Button>
+            : <Button onClick={() => onApproved?.(derivedName)} type="button">Start Building <ArrowRight size={17} /></Button>
+          }
         </div>
       </div>
     </div>
@@ -79,11 +83,11 @@ export function ProjectBriefModal({ appType, model, prompt, projectId = "healtht
 }
 
 function PrdReview({ appType, model, prompt }: { appType: string; model: string; prompt: string }) {
-  const derivedName = prompt.split(".")[0]?.trim().slice(0, 50) || "My App";
+  const derivedName = prompt.split(".")[0]?.trim().slice(0, 50) ?? "My App";
   const summary = [
     { label: "Main flow", value: "Sign up → workspace → tasks → board" },
     { label: "Backend", value: "Managed Supabase" },
-    { label: "Estimate", value: "85 credits" }
+    { label: "Estimate", value: "85 credits" },
   ] as const;
 
   return (

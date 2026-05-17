@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { TabBar } from "@/components/shared/TabBar";
 import { AccountSection } from "@/components/settings/sections/AccountSection";
 import { AnalyticsSection } from "@/components/settings/sections/AnalyticsSection";
@@ -12,25 +12,49 @@ import { SecuritySection } from "@/components/settings/sections/SecuritySection"
 const tabs = ["Account", "Credits & Billing", "Database", "Security", "Analytics", "Danger Zone"] as const;
 type SettingsTab = (typeof tabs)[number];
 
-const SETTINGS_PANELS: Record<SettingsTab, ReactNode> = {
-  Account: <AccountSection />,
-  "Credits & Billing": <BillingSection />,
-  Database: <DatabaseSection />,
-  Security: <SecuritySection />,
-  Analytics: <AnalyticsSection />,
-  "Danger Zone": <DangerSection />
+export type CreditTransaction = {
+  id: string;
+  type: string;
+  amount: number;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
 };
 
-export function SettingsMock() {
+type SettingsMockProps = {
+  name: string;
+  email: string;
+  plan: string;
+  credits: number;
+  maxCredits: number;
+  spent: number;
+  bonusEarned: number;
+  transactions: CreditTransaction[];
+};
+
+export function SettingsMock({ name, email, plan, credits, maxCredits, spent, bonusEarned, transactions }: SettingsMockProps) {
   const [tab, setTab] = useState<SettingsTab>("Credits & Billing");
 
   return (
     <section className="app-content">
       <h1 className="text-4xl font-semibold">Settings</h1>
-      <p className="mt-2 text-slate-300">Mock settings and billing surfaces before backend wiring.</p>
+      <p className="mt-2 text-slate-300">Manage your account, billing, and project preferences.</p>
       <TabBar tabs={tabs} value={tab} onChange={setTab} />
       <div className="mt-6">
-        {SETTINGS_PANELS[tab]}
+        {tab === "Account" ? <AccountSection email={email} maxCredits={maxCredits} name={name} plan={plan} /> : null}
+        {tab === "Credits & Billing" ? (
+          <BillingSection
+            bonusEarned={bonusEarned}
+            credits={credits}
+            maxCredits={maxCredits}
+            plan={plan}
+            spent={spent}
+            transactions={transactions}
+          />
+        ) : null}
+        {tab === "Database" ? <DatabaseSection /> : null}
+        {tab === "Security" ? <SecuritySection /> : null}
+        {tab === "Analytics" ? <AnalyticsSection /> : null}
+        {tab === "Danger Zone" ? <DangerSection /> : null}
       </div>
     </section>
   );

@@ -27,7 +27,7 @@ export default function LoginPage() {
     }
 
     toast.success("Signed in!");
-    router.push("/new");
+    router.push("/");
   }
 
   async function handleGithubAuth() {

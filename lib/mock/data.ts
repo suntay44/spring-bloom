@@ -31,9 +31,19 @@ export const appTypes: [AppType, ...AppType[]] = [
 ];
 
 export const models: [AIModel, ...AIModel[]] = [
-  { id: "claude-sonnet-4-5", label: "Claude 4.5 Sonnet", caption: "200k context", provider: "Anthropic" },
-  { id: "claude-opus-4-7", label: "Claude 4.7 Opus", caption: "Most capable planning", provider: "Anthropic" },
-  { id: "gpt-5-5", label: "GPT 5.5", caption: "Strong coding and review", provider: "OpenAI" }
+  // Anthropic — strongest → fastest
+  { id: "claude-opus-4-7",   label: "Claude Opus 4.7",   caption: "Most Capable",      provider: "anthropic" },
+  { id: "claude-opus-4-6",   label: "Claude Opus 4.6",   caption: "Highly Capable",    provider: "anthropic" },
+  { id: "claude-opus-4-5",   label: "Claude Opus 4.5",   caption: "Capable",           provider: "anthropic" },
+  { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", caption: "Latest",            provider: "anthropic" },
+  { id: "claude-sonnet-4-5", label: "Claude Sonnet 4.5", caption: "Balanced",          provider: "anthropic" },
+  { id: "claude-haiku-4-5",  label: "Claude Haiku 4.5",  caption: "Fast",              provider: "anthropic" },
+  // OpenAI — strongest → fastest
+  { id: "gpt-5-5",           label: "GPT-5.5",           caption: "Most Capable",      provider: "openai" },
+  { id: "gpt-5-4",           label: "GPT-5.4",           caption: "Balanced",          provider: "openai" },
+  { id: "gpt-5-3-codex",     label: "GPT-5.3 Codex",     caption: "Code Optimized",    provider: "openai" },
+  // Gemini — strongest → fastest
+  { id: "gemini-3-1-pro",    label: "Gemini 3.1 Pro",    caption: "Most Capable",      provider: "google" },
 ];
 
 export const pricingPlans: PricingPlan[] = [

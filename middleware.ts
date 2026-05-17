@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const protectedPaths = ['/dashboard', '/new', '/builder', '/settings']
+  const protectedPaths = ['/dashboard', '/project', '/settings']
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
 
   if (isProtected && !user) {
@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
 
   if (user && (pathname === '/login' || pathname === '/signup')) {
     const newUrl = request.nextUrl.clone()
-    newUrl.pathname = '/new'
+    newUrl.pathname = '/'
     return NextResponse.redirect(newUrl)
   }
 

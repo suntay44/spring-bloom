@@ -9,7 +9,7 @@ export function HeroCTAButtons() {
   const router = useRouter();
 
   function handleStartBuilding() {
-    router.push("/new");
+    router.push("/");
   }
 
   return (
@@ -18,7 +18,7 @@ export function HeroCTAButtons() {
         <Button onClick={handleStartBuilding} type="button">
           Start Building <ArrowRight size={17} />
         </Button>
-        <Button render={<Link href="#workflow" />} variant="outline">
+        <Button nativeButton={false} render={<Link href="#workflow" />} variant="outline">
           <Play size={17} /> Watch flow
         </Button>
       </div>
