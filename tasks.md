@@ -4,8 +4,8 @@
 > After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Status**: Phases 10 and 11 complete and verified. UI/UX cleanup complete.
-> **Current phase**: Phase 12 — Fly.io Machine + Live Preview
+> **Status**: Phases 10, 11, 11b, and 12 complete and verified.
+> **Current phase**: Phase 13 — Supabase Auto-Provisioning
 
 ---
 
@@ -78,23 +78,341 @@ Done manually this session (not by Codex).
 
 ---
 
-## ── PHASE 12 ── Fly.io Machine + Live Preview
+## ── COMPLETED ── Phase 12 — Fly.io Machine + Live Preview
 
-**Goal**: Every project gets a real Node.js execution environment on Fly.io.
-When the AI generates files and shell commands via the artifact parser, they are executed on the
-user's Fly.io machine. The running dev server is proxied into the builder preview iframe.
-This replaces the placeholder `PreviewPanel` and static `FilesPanel`.
+All tasks complete. Verified with zero TypeScript errors. Security audit passed.
+
+**What was done:**
+- [x] `supabase/migrations/002_fly_machine_columns.sql` — added `fly_machine_id` + `fly_machine_status` columns to `projects`
+- [x] `lib/fly/client.ts` — full Machines API wrapper: `createMachine`, `startMachine`, `stopMachine`, `getMachine`, `execOnMachine`, `writeFile`, `listFiles`
+- [x] `app/api/fly/machine/route.ts` — POST: provision or start existing machine; idempotent
+- [x] `app/api/fly/machine/[machineId]/start/route.ts` — start with ownership check
+- [x] `app/api/fly/machine/[machineId]/stop/route.ts` — stop with ownership check
+- [x] `app/api/fly/machine/[machineId]/status/route.ts` — GET machine state with auth + ownership
+- [x] `app/api/fly/machine/[machineId]/files/route.ts` — GET list + POST write with ownership check
+- [x] `app/api/fly/machine/[machineId]/exec/route.ts` — POST run command with ownership check
+- [x] `app/api/fly/preview/[machineId]/route.ts` — proxy to machine dev server with auth
+- [x] `lib/fly/action-runner.ts` — applies parsed AI artifact actions (file writes + shell execs) to the machine
+- [x] `hooks/useMachineProvisioner.ts` — client hook: provisions on mount, exposes `{ machineId, provisioning, error }`
+- [x] `components/builder/BuilderMock.tsx` — wired provisioner hook; `beforeunload` → `sendBeacon` to stop machine
+- [x] `components/builder/ChatPanel.tsx` — runs `ActionRunner` after stream completes; shows "Applying changes..." banner; toasts on action failures
+- [x] `components/builder/panels/PreviewPanel.tsx` — shows spinner while provisioning, live iframe when machine ready, falls back to mock
+- [x] `components/builder/panels/FilesPanel.tsx` — real file tree from machine; click-to-view file content
+
+**Security fixes applied during audit:**
+- [x] All `[machineId]` routes verify `fly_machine_id` belongs to the authenticated user's project (IDOR prevention)
+- [x] `writeFile` path sanitized with regex + `printf` positional args (no shell injection)
+- [x] `startMachine`/`stopMachine` throw on non-OK HTTP status
+- [x] `FilesPanel` wrapped in try/catch/finally (spinner always clears)
+- [x] `ChatPanel` useEffect dependency array includes `onTabChange`
+
+---
+
+## ── PHASE 13 ── Supabase Auto-Provisioning
+
+**Goal**: Auto-create a dedicated Supabase project for each Wild Cupcake user on signup.
+When the AI generates a full-stack app with a database, it generates schema + RLS policies into
+the user's own Supabase project (not the platform's). Invisible to the user — happens in the
+background. Generated apps connect to the user's Supabase via env vars injected into the Fly machine.
 
 **Pre-requisites** (must be in `.env.local` before Codex runs this phase):
 ```
-FLY_API_TOKEN=fo1_...          ← Fly.io personal access token (fly.io → Account → Access Tokens)
-FLY_APP_NAME=wildca-ke         ← The Fly.io app name to provision machines under (create it first: `fly apps create wildca-ke`)
-FLY_ORG_SLUG=personal          ← Your Fly.io org slug (usually "personal")
+SUPABASE_MANAGEMENT_TOKEN=sbp_...   ← Supabase Management API token (app.supabase.com → Account → Access Tokens)
+SUPABASE_ORG_ID=...                 ← Your Supabase organization ID (from app.supabase.com/org/settings)
+WEBHOOK_SECRET=...                  ← Random secret for validating Supabase Auth webhooks (use: openssl rand -hex 32)
 ```
 
 ---
 
-### 12.1 — Store Fly machine ID on project, not profile
+### 13.1 — Create `lib/supabase/management.ts` — Management API client
+
+- [ ] Create `lib/supabase/management.ts`:
+  ```typescript
+  // SERVER ONLY — never import in client components
+  const MGMT_BASE = 'https://api.supabase.com/v1'
+
+  function mgmtHeaders() {
+    return {
+      Authorization: `Bearer ${process.env.SUPABASE_MANAGEMENT_TOKEN!}`,
+      'Content-Type': 'application/json',
+    }
+  }
+
+  export interface SupabaseProject {
+    id: string
+    ref: string
+    name: string
+    status: string
+    api_url: string
+    region: string
+  }
+
+  export interface SupabaseApiKey {
+    name: string
+    api_key: string
+  }
+
+  // Create a new Supabase project for a user. Takes ~30s to become ready.
+  export async function createSupabaseProject(params: {
+    name: string
+    region?: string
+    dbPass: string
+  }): Promise<SupabaseProject> {
+    const res = await fetch(`${MGMT_BASE}/projects`, {
+      method: 'POST',
+      headers: mgmtHeaders(),
+      body: JSON.stringify({
+        name: params.name,
+        organization_id: process.env.SUPABASE_ORG_ID!,
+        region: params.region ?? 'us-east-1',
+        db_pass: params.dbPass,
+        plan: 'free',
+      }),
+    })
+    if (!res.ok) throw new Error(`Supabase create project failed: ${await res.text()}`)
+    return res.json() as Promise<SupabaseProject>
+  }
+
+  // Poll until project status is 'ACTIVE_HEALTHY'. Timeout after 120s.
+  export async function waitForProject(ref: string, timeoutMs = 120_000): Promise<void> {
+    const start = Date.now()
+    while (Date.now() - start < timeoutMs) {
+      const res = await fetch(`${MGMT_BASE}/projects/${ref}`, { headers: mgmtHeaders() })
+      if (res.ok) {
+        const project = await res.json() as { status: string }
+        if (project.status === 'ACTIVE_HEALTHY') return
+      }
+      await new Promise((r) => setTimeout(r, 4000))
+    }
+    throw new Error(`Supabase project ${ref} did not become healthy within ${timeoutMs}ms`)
+  }
+
+  export async function getProjectApiKeys(ref: string): Promise<SupabaseApiKey[]> {
+    const res = await fetch(`${MGMT_BASE}/projects/${ref}/api-keys`, {
+      headers: mgmtHeaders(),
+    })
+    if (!res.ok) throw new Error(`Failed to get API keys for project ${ref}`)
+    return res.json() as Promise<SupabaseApiKey[]>
+  }
+
+  // Run a SQL migration on the user's Supabase project
+  export async function runMigration(ref: string, sql: string): Promise<void> {
+    const res = await fetch(`${MGMT_BASE}/projects/${ref}/database/query`, {
+      method: 'POST',
+      headers: mgmtHeaders(),
+      body: JSON.stringify({ query: sql }),
+    })
+    if (!res.ok) throw new Error(`Migration failed on project ${ref}: ${await res.text()}`)
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 13.2 — Add Supabase project columns to `profiles` table
+
+- [ ] Run in Supabase SQL editor:
+  ```sql
+  alter table public.profiles
+    add column if not exists supabase_project_ref  text,
+    add column if not exists supabase_project_url  text,
+    add column if not exists supabase_anon_key     text,
+    add column if not exists supabase_service_key  text,
+    add column if not exists supabase_status       text default 'none'
+      check (supabase_status in ('none', 'provisioning', 'ready', 'error'));
+
+  -- Revoke anon access to the service key column — only service role can read it
+  create policy "service key is private" on public.profiles
+    as restrictive
+    for select
+    using (auth.uid() = id);
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 13.3 — Create `lib/supabase/base-schema.ts` — Base SQL for generated apps
+
+- [ ] Create `lib/supabase/base-schema.ts`:
+  ```typescript
+  // Base schema applied to every user's Supabase project on provisioning.
+  // Gives AI-generated apps a safe, RLS-enabled foundation to build on.
+  export const BASE_SCHEMA_SQL = `
+  -- Enable required extensions
+  create extension if not exists "uuid-ossp";
+  create extension if not exists "pgcrypto";
+
+  -- Auth helpers view (safe to expose to generated app)
+  create or replace view public.users as
+    select id, email, created_at from auth.users;
+  `
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 13.4 — Create `app/api/webhooks/user-created/route.ts`
+
+This webhook is called by Supabase Auth when a new user signs up.
+It provisions their Supabase project in the background.
+
+- [ ] Create `app/api/webhooks/user-created/route.ts`:
+  ```typescript
+  import { createClient } from '@supabase/supabase-js'
+  import { NextResponse } from 'next/server'
+  import { createSupabaseProject, waitForProject, getProjectApiKeys, runMigration } from '@/lib/supabase/management'
+  import { BASE_SCHEMA_SQL } from '@/lib/supabase/base-schema'
+
+  // Service-role client for writing back to platform DB
+  const platformClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+
+  export async function POST(req: Request) {
+    // Validate webhook secret
+    const secret = req.headers.get('x-webhook-secret')
+    if (secret !== process.env.WEBHOOK_SECRET) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const body = await req.json() as { type: string; record: { id: string; email: string } }
+    if (body.type !== 'INSERT') return NextResponse.json({ ok: true })
+
+    const userId = body.record.id
+    const projectName = `wc-${userId.slice(0, 8)}`
+    const dbPass = crypto.randomUUID().replace(/-/g, '')
+
+    // Mark as provisioning immediately so UI can poll
+    await (platformClient as unknown as ReturnType<typeof createClient<any>>)
+      .from('profiles')
+      .update({ supabase_status: 'provisioning' })
+      .eq('id', userId)
+
+    try {
+      const project = await createSupabaseProject({ name: projectName, dbPass })
+      await waitForProject(project.ref)
+      const keys = await getProjectApiKeys(project.ref)
+      const anonKey = keys.find((k) => k.name === 'anon')?.api_key ?? ''
+      const serviceKey = keys.find((k) => k.name === 'service_role')?.api_key ?? ''
+      await runMigration(project.ref, BASE_SCHEMA_SQL)
+
+      await (platformClient as unknown as ReturnType<typeof createClient<any>>)
+        .from('profiles')
+        .update({
+          supabase_project_ref: project.ref,
+          supabase_project_url: project.api_url,
+          supabase_anon_key: anonKey,
+          supabase_service_key: serviceKey,
+          supabase_status: 'ready',
+        })
+        .eq('id', userId)
+    } catch (err) {
+      console.error('[user-created webhook] Provisioning failed:', err)
+      await (platformClient as unknown as ReturnType<typeof createClient<any>>)
+        .from('profiles')
+        .update({ supabase_status: 'error' })
+        .eq('id', userId)
+    }
+
+    return NextResponse.json({ ok: true })
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 13.5 — Register the webhook in Supabase Auth (manual step)
+
+- [ ] In Supabase Dashboard → Authentication → Hooks (or Webhooks):
+  - Event: `auth.users` INSERT
+  - URL: `https://your-domain.com/api/webhooks/user-created`
+  - Header: `x-webhook-secret: {value of WEBHOOK_SECRET in .env}`
+
+---
+
+### 13.6 — Inject Supabase env vars into Fly machine on builder open
+
+When a project opens in the builder, inject the user's Supabase URL + anon key into the
+Fly.io machine so generated apps automatically have working DB connections.
+
+- [ ] In `app/api/fly/machine/route.ts`, after a successful `startMachine()` call, add:
+  ```typescript
+  // Inject user's Supabase env vars into machine
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('supabase_project_url, supabase_anon_key')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.supabase_project_url && profile?.supabase_anon_key) {
+    await execOnMachine(machine.id, [
+      'sh', '-c',
+      'printf "NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\n" "$1" "$2" >> /app/.env.local',
+      '--',
+      profile.supabase_project_url,
+      profile.supabase_anon_key,
+    ])
+  }
+  ```
+  Import `execOnMachine` from `@/lib/fly/client` (already imported in that route).
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 13.7 — Create `GET /api/user/supabase-status`
+
+Allows the client to poll provisioning state if the user opens the builder right after signup.
+
+- [ ] Create `app/api/user/supabase-status/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+
+  export async function GET() {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('supabase_status')
+      .eq('id', user.id)
+      .single() as { data: { supabase_status: string } | null; error: unknown }
+
+    return NextResponse.json({ status: data?.supabase_status ?? 'none' })
+  }
+  ```
+- [ ] `pnpm typecheck` — zero errors.
+
+---
+
+### 13.8 — Verification
+
+- [ ] `pnpm typecheck` — zero TypeScript errors.
+- [ ] `pnpm dev` — no runtime errors.
+- [ ] Deploy to staging. Register a new test account.
+- [ ] Within ~2 minutes: `profiles.supabase_status` transitions `none` → `provisioning` → `ready`.
+- [ ] `profiles.supabase_project_ref`, `supabase_project_url`, `supabase_anon_key` all populated.
+- [ ] Open a project in the builder → `/app/.env.local` on the Fly machine contains `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- [ ] `GET /api/user/supabase-status` returns `{ status: "ready" }`.
+- [ ] Confirm in Supabase dashboard: new project exists under the org with the base schema applied.
+
+---
+
+## ── NEXT ── Phase 14 — Credits + Stripe Billing
+
+**Begins after Phase 13 verification passes.**
+
+Key tasks:
+- Stripe Checkout for credit top-up packs ($17/100cr, $40/250cr, $80/500cr, $150/1000cr)
+- `POST /api/webhooks/stripe` — handle `checkout.session.completed` → insert credit transaction
+- Monthly plan credit reset via `pg_cron` or Supabase scheduled function
+- `/settings` billing section: live Stripe Customer Portal link
+- Plan upgrade/downgrade flow
+
+See PLAN.md Phase 14 for full spec.
 
 The existing `profiles` table has `fly_machine_id` — but each **project** needs its own machine.
 

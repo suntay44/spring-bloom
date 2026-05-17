@@ -2410,13 +2410,13 @@ Week 5:   Phase H  (Button interactivity + Sonner toasts)         ✅ Done
 Week 5:   Phase I  (End-to-end verification gate)                 ✅ Done
           ── UI/UX GATE PASSED — backend work begins ──
 Week 6:   Phase 10 (Platform Supabase schema + real auth)         ✅ Done
-Week 7:   Phase 11 (AI streaming — Anthropic + OpenAI + Google)   ← current
-Week 8:   Review/security agent pipeline + credit receipts
-Week 9:   Phase 12 (Fly.io machine integration)
-Week 10:  Phase 13 (Supabase auto-provisioning)
-Week 10:  Phase 14 (Credits + Stripe billing)
-Week 11:  Analytics instrumentation + generated app events
-Week 12:  Phase 15 (Polish + deployment)
+Week 7:   Phase 11 (AI streaming — Anthropic + OpenAI + Google)   ✅ Done
+Week 7:   Phase 11b (Mock data cleanup + UI fixes)                 ✅ Done
+Week 9:   Phase 12 (Fly.io machine integration)                    ✅ Done
+Week 10:  Phase 13 (Supabase auto-provisioning)                    ← current
+Week 11:  Phase 14 (Credits + Stripe billing)
+Week 12:  Analytics instrumentation + generated app events
+Week 13:  Phase 15 (Polish + deployment)
 ```
 
 ---
