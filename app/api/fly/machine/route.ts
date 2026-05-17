@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { createMachine, startMachine, getMachine } from '@/lib/fly/client'
+import { createMachine, startMachine, getMachine, execOnMachine } from '@/lib/fly/client'
 
 export async function POST(req: Request) {
   const supabase = await createClient()
@@ -24,6 +24,22 @@ export async function POST(req: Request) {
     try {
       await startMachine(project.fly_machine_id)
       const machine = await getMachine(project.fly_machine_id)
+      // Inject user's Supabase env vars into machine
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('supabase_project_url, supabase_anon_key')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.supabase_project_url && profile?.supabase_anon_key) {
+        await execOnMachine(machine.id, [
+          'sh', '-c',
+          'printf "NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\n" "$1" "$2" >> /app/.env.local',
+          '--',
+          profile.supabase_project_url,
+          profile.supabase_anon_key,
+        ])
+      }
       await supabase.from('projects').update({ fly_machine_status: machine.state }).eq('id', projectId)
       return NextResponse.json({ data: machine })
     } catch {
