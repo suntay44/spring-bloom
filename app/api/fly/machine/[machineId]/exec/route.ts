@@ -1,0 +1,27 @@
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { execOnMachine } from '@/lib/fly/client'
+
+// POST — run a shell command on the user's machine
+// Body: { command: string }  e.g. "npm install"
+export async function POST(req: Request, { params }: { params: Promise<{ machineId: string }> }) {
+  const { machineId } = await params
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Verify caller owns a project with this machine
+  const { data: project } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('fly_machine_id', machineId)
+    .eq('user_id', user.id)
+    .single()
+  if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const { command } = await req.json() as { command: string }
+  if (!command) return NextResponse.json({ error: 'command required' }, { status: 400 })
+
+  const result = await execOnMachine(machineId, ['sh', '-c', command])
+  return NextResponse.json({ data: result })
+}

@@ -26,9 +26,31 @@ const VIEWPORT_OPTIONS = [
   { id: "mobile", label: "Mobile", icon: Smartphone }
 ] as const satisfies Array<{ id: Viewport; label: string; icon: typeof Monitor }>;
 
-export function PreviewPanel({ project }: { project: MockProject }) {
+export function PreviewPanel({ project, machineId, provisioning }: { project: MockProject; machineId: string | null; provisioning: boolean }) {
   const [viewport, setViewport] = useState<Viewport>("desktop");
 
+  if (provisioning) {
+    return (
+      <div className="grid min-h-[520px] place-items-center text-center">
+        <div>
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-purple-500 border-t-transparent" />
+          <p className="font-semibold">Warming up your environment...</p>
+          <p className="mt-2 text-sm font-bold text-slate-500">Provisioning a Fly.io machine for this project.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (machineId) {
+    return (
+      <div>
+        <div className="border-b border-zinc-800 px-4 py-2 text-xs font-semibold text-slate-500">Machine: {machineId}</div>
+        <iframe className="h-[720px] w-full bg-white" src={`/api/fly/preview/${machineId}`} title={`${project.name} live preview`} />
+      </div>
+    );
+  }
+
+  // No machine yet — fall through to mock preview for visual context
   if (project.type === "mobile") {
     return <MobilePreview />;
   }

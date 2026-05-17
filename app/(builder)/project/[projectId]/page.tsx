@@ -26,7 +26,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   ] = await Promise.all([
     supabase
       .from("projects")
-      .select("id, name, type, framework, status")
+      .select("id, name, type, framework, status, fly_machine_id")
       .eq("id", projectId)
       .eq("user_id", user.id)
       .single(),
@@ -82,5 +82,5 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
     maxCredits,
   };
 
-  return <BuilderMock initialMessages={initialMessages} project={mockProject} user={menuUser} />;
+  return <BuilderMock initialMessages={initialMessages} machineId={project.fly_machine_id ?? null} project={mockProject} user={menuUser} />;
 }

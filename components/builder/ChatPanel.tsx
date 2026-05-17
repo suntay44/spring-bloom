@@ -5,12 +5,15 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { ChevronDown, Loader2, Mic, Paintbrush, Zap } from "lucide-react";
 import { MessageItem } from "@/components/builder/MessageItem";
+import { parseArtifacts } from "@/lib/ai/artifact-parser";
 import { estimateCredits } from "@/lib/ai/credit-estimator";
+import { runArtifactActions } from "@/lib/fly/action-runner";
 import { toast } from "@/lib/toast";
 import type { BuilderTab } from "@/components/builder/ProjectMenu";
 
 type ChatPanelProps = {
   projectId: string;
+  machineId: string | null;
   initialMessages?: UIMessage[];
   onTabChange: (tab: BuilderTab) => void;
   onToolsOpen: () => void;
@@ -34,11 +37,12 @@ const QUICK_ACTIONS = [
 
 const BUILD_OPTIONS = ["Build", "Preview only", "Deploy"] as const;
 
-export function ChatPanel({ projectId, initialMessages = [], onTabChange, onToolsOpen, onVisualEditsToggle, visualEdits }: ChatPanelProps) {
+export function ChatPanel({ projectId, machineId, initialMessages = [], onTabChange, onToolsOpen, onVisualEditsToggle, visualEdits }: ChatPanelProps) {
   const [buildMenuOpen, setBuildMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
+  const [running, setRunning] = useState(false);
   const transport = useMemo(
     () => new DefaultChatTransport({
       api: "/api/chat",
@@ -76,9 +80,30 @@ export function ChatPanel({ projectId, initialMessages = [], onTabChange, onTool
     if (error) toast.error("Generation failed. Please try again.");
   }, [error]);
 
+  useEffect(() => {
+    if (status !== 'ready' || !machineId || !messages.length) return
+    const last = messages[messages.length - 1]
+    if (last?.role !== 'assistant') return
+    const text = last.parts.find((p) => p.type === 'text')?.text ?? ''
+    const artifacts = parseArtifacts(text)
+    if (!artifacts.length) return
+
+    setRunning(true)
+    runArtifactActions(machineId, artifacts).then((results) => {
+      const failed = results.filter((r) => !r.ok)
+      if (failed.length > 0) {
+        toast.error(`${failed.length} action${failed.length > 1 ? 's' : ''} failed — check the Files panel for details.`)
+      } else {
+        onTabChange('Preview') // switch to preview only when all actions succeed
+      }
+    }).finally(() => {
+      setRunning(false)
+    })
+  }, [status, machineId, messages, onTabChange])
+
   async function handleSend() {
     const text = inputValue.trim();
-    if (!text || isStreaming) return;
+    if (!text || isStreaming || running) return;
     await sendMessage({ text });
     setInputValue("");
   }
@@ -97,6 +122,7 @@ export function ChatPanel({ projectId, initialMessages = [], onTabChange, onTool
         </div>
       </div>
       <div className="agent-composer">
+        {running ? <div className="mb-2 text-xs font-semibold text-purple-300">Applying changes...</div> : null}
         <select className="chip-btn" disabled={isStreaming} onChange={(event) => setSelectedModelId(event.target.value)} value={selectedModelId}>
           {models.length > 0 ? models.map((model) => <option key={model.model_id} value={model.model_id}>{model.display_name}</option>) : <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>}
         </select>
@@ -112,7 +138,7 @@ export function ChatPanel({ projectId, initialMessages = [], onTabChange, onTool
               </div>
             ) : null}
             <button aria-label="Voice input" className="circle-btn" onClick={() => toast("Voice input — coming soon")} type="button"><Mic size={15} /></button>
-            <button aria-label={isStreaming ? "Stop generation" : "Send message"} className="circle-btn primary" disabled={!inputValue.trim() && !isStreaming} onClick={() => isStreaming ? stop() : void handleSend()} type="button">{isStreaming ? <Loader2 className="animate-spin" size={15} /> : <Zap size={15} />}</button>
+            <button aria-label={isStreaming ? "Stop generation" : "Send message"} className="circle-btn primary" disabled={running || (!inputValue.trim() && !isStreaming)} onClick={() => isStreaming ? stop() : void handleSend()} type="button">{isStreaming || running ? <Loader2 className="animate-spin" size={15} /> : <Zap size={15} />}</button>
           </div>
         </div>
       </div>
