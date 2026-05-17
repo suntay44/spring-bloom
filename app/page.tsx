@@ -1,27 +1,54 @@
 import { Bot, CheckCircle2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { AppShell } from "@/components/layout/AppShell";
 import { HeroCTAButtons } from "@/components/marketing/HeroCTAButtons";
 import { Navbar } from "@/components/marketing/Navbar";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { HeroPromptSection } from "@/components/marketing/HeroPromptSection";
 import { Footer } from "@/components/shared/Footer";
+import { NewProjectClient } from "@/components/new-project/NewProjectClient";
 import { Badge } from "@/components/ui/badge";
 import { DEVELOPER_FEATURES, MARKETING_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
 
 const HERO_STATS = [
   { title: "Plan", body: "5-question brief before code" },
   { title: "Build", body: "chat left, preview right" },
-  { title: "Trust", body: "review, security, analytics" }
+  { title: "Trust", body: "review, security, analytics" },
 ] as const;
 
 const WORKFLOW_STEPS = [
   { step: "1", title: "Describe your app", body: "Choose full-stack, mobile, or landing page and write the first idea." },
   { step: "2", title: "Answer five questions", body: "Clarify product goal, frontend, backend, screens, and constraints." },
-  { step: "3", title: "Approve the PRD", body: "See scope, backend choice, model, and credit estimate before building." }
+  { step: "3", title: "Approve the PRD", body: "See scope, backend choice, model, and credit estimate before building." },
 ] as const;
 
 const FEATURE_HIGHLIGHTS = ["Code review built in", "Security scans", "Analytics from day one"] as const;
 
-export default function MarketingPage() {
+export default async function RootPage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Logged-in users see the new project creation screen at root
+  if (user) {
+    const [{ data: profile }, { data: balanceRow }, { data: projects }] = await Promise.all([
+      supabase.from("profiles").select("full_name, plan").eq("id", user.id).single(),
+      supabase.from("user_credit_balance").select("balance").eq("user_id", user.id).single(),
+      supabase
+        .from("projects")
+        .select("id, name, type, status")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(8),
+    ]);
+
+    return (
+      <AppShell balance={Number(balanceRow?.balance ?? 0)} profile={profile} projects={projects ?? []} user={user}>
+        <NewProjectClient />
+      </AppShell>
+    );
+  }
+
+  // Logged-out users see the marketing landing page
   return (
     <main className="page-shell">
       <Navbar />
@@ -75,9 +102,7 @@ export default function MarketingPage() {
       <section className="section bg-zinc-950" id="features">
         <div className="container">
           <h2>Built for users who still care about code.</h2>
-          <p className="section-lede">
-            The default view is simple, but developer-grade tools are always one click away.
-          </p>
+          <p className="section-lede">Developer-grade tools are always one click away.</p>
           <div className="mt-8 grid-3">
             {MARKETING_FEATURES.map((feature) => {
               const Icon = feature.icon;
@@ -105,7 +130,6 @@ export default function MarketingPage() {
       <section className="section border-t border-zinc-800/60 bg-zinc-950">
         <div className="container">
           <h2>Everything a serious builder needs.</h2>
-          <p className="section-lede">Developer-grade tools are always one click away, never hidden behind a paywall.</p>
           <div className="mt-10 grid gap-0 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
             {DEVELOPER_FEATURES.map((item) => (
               <div className="flex flex-wrap items-start gap-6 px-6 py-5" key={item.title}>
@@ -138,7 +162,6 @@ export default function MarketingPage() {
       </section>
 
       <PricingSection />
-
       <Footer />
     </main>
   );

@@ -10,7 +10,7 @@ export function HeroPromptSection() {
   const router = useRouter();
 
   function handleSend(_opts: { prompt: string; appType: AppType; model: AIModel }) {
-    router.push("/new");
+    router.push("/");
   }
 
   return (

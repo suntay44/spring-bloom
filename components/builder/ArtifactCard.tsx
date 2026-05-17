@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Clock, FileText, Loader2, Terminal } from "lucide-react";
+import type { ParsedArtifact } from "@/lib/ai/artifact-parser";
 import type { MockArtifact } from "@/lib/mock/messages";
 
 const STATUS_ICON: Record<MockArtifact["status"], React.ReactNode> = {
@@ -12,25 +13,43 @@ const STATUS_ICON: Record<MockArtifact["status"], React.ReactNode> = {
 };
 
 type ArtifactCardProps = {
-  artifacts: MockArtifact[];
+  artifacts: MockArtifact[] | ParsedArtifact[];
   defaultExpanded?: boolean;
 };
 
+type DisplayArtifact = MockArtifact;
+
+function toDisplayArtifacts(artifacts: MockArtifact[] | ParsedArtifact[]): DisplayArtifact[] {
+  return artifacts.flatMap((artifact) => {
+    if ("actions" in artifact) {
+      return artifact.actions.map((action) => ({
+        type: action.type,
+        path: action.filePath,
+        command: action.type === "shell" || action.type === "start" ? action.content : undefined,
+        status: "complete" as const,
+      }));
+    }
+
+    return artifact;
+  });
+}
+
 export function ArtifactCard({ artifacts, defaultExpanded = false }: ArtifactCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const complete = artifacts.filter((artifact) => artifact.status === "complete").length;
+  const displayArtifacts = toDisplayArtifacts(artifacts);
+  const complete = displayArtifacts.filter((artifact) => artifact.status === "complete").length;
 
   return (
     <div className="result-card">
       <div className="result-card-head">
-        <strong>{complete}/{artifacts.length} files generated</strong>
+        <strong>{complete}/{displayArtifacts.length} files generated</strong>
         <button aria-label={expanded ? "Collapse artifacts" : "Expand artifacts"} onClick={() => setExpanded((value) => !value)} type="button">
           {expanded ? "−" : "+"}
         </button>
       </div>
       {expanded ? (
         <div className="space-y-2 px-5 py-3">
-          {artifacts.map((artifact, index) => (
+          {displayArtifacts.map((artifact, index) => (
             <div className="flex items-center gap-2 text-sm" key={`${artifact.path ?? artifact.command}-${index}`}>
               {artifact.type === "shell" ? <Terminal size={14} /> : <FileText size={14} />}
               <span className="font-mono">{artifact.path ?? artifact.command}</span>

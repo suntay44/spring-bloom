@@ -42,7 +42,7 @@ export function AuthModal({ onClose, defaultTab = "login", selectedPlan }: AuthM
 
     toast.success(defaultTab === "signup" ? "Account created!" : "Signed in!");
     onClose();
-    router.push("/new");
+    router.push("/");
   }
 
   async function handleGithubAuth() {

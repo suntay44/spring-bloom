@@ -32,7 +32,7 @@ export default function SignupPage() {
     }
 
     toast.success("Account created!");
-    router.push("/new");
+    router.push("/");
   }
 
   async function handleGithubAuth() {

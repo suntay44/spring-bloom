@@ -30,7 +30,7 @@ export function PricingSection({ expanded = false }: { expanded?: boolean }) {
             <h2>Credit pricing that stays visible.</h2>
             <p className="section-lede">Credits map to real work: planning, building, review, security, analytics, and deploy assistance.</p>
           </div>
-          {expanded ? <Button onClick={() => openPlan("Pro")} type="button">Start with selected plan</Button> : <Button render={<Link href="/pricing" />} variant="outline">Compare plans</Button>}
+          {expanded ? <Button onClick={() => openPlan("Pro")} type="button">Start with selected plan</Button> : <Button nativeButton={false} render={<Link href="/pricing" />} variant="outline">Compare plans</Button>}
         </div>
         <div className="grid-4">
           {pricingPlans.map((plan) => (

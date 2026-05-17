@@ -21,7 +21,7 @@ export function Navbar() {
         </nav>
         <div className="flex items-center gap-3">
           <Button onClick={() => setAuthOpen(true)} type="button" variant="outline">Login</Button>
-          <Button render={<Link href="/new" />} type="button">Start Building <ArrowRight size={17} /></Button>
+          <Button onClick={() => setAuthOpen(true)} type="button">Start Building <ArrowRight size={17} /></Button>
         </div>
       </div>
       {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} defaultTab="login" /> : null}

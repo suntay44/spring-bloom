@@ -12,7 +12,7 @@ export default async function AuthedLayout({ children }: Readonly<{ children: Re
     redirect("/login");
   }
 
-  const [{ data: profile }, { data: balanceRow }] = await Promise.all([
+  const [{ data: profile }, { data: balanceRow }, { data: projects }] = await Promise.all([
     supabase
       .from("profiles")
       .select("full_name, plan")
@@ -23,12 +23,19 @@ export default async function AuthedLayout({ children }: Readonly<{ children: Re
       .select("balance")
       .eq("user_id", user.id)
       .single(),
+    supabase
+      .from("projects")
+      .select("id, name, type, status")
+      .eq("user_id", user.id)
+      .order("updated_at", { ascending: false })
+      .limit(8),
   ]);
 
   return (
     <AppShell
       balance={Number(balanceRow?.balance ?? 0)}
       profile={profile}
+      projects={projects ?? []}
       user={user}
     >
       {children}
