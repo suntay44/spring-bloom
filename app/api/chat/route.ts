@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       .single(),
     supabase
       .from('model_pricing')
-      .select('model_id, display_name, provider, credits_per_1m_input, credits_per_1m_output')
+      .select('model_id, display_name, provider, min_plan, credits_per_1m_input, credits_per_1m_output')
       .eq('model_id', modelId)
       .eq('is_active', true)
       .single(),
@@ -51,6 +51,24 @@ export async function POST(req: Request) {
 
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   if (!modelPricing) return NextResponse.json({ error: 'Model not available' }, { status: 400 })
+
+  // Load user plan for model gate check
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('plan')
+    .eq('id', user.id)
+    .single() as { data: { plan: string } | null; error: unknown }
+
+  const planOrder = ['free', 'starter', 'pro', 'teams']
+  const userPlanIndex = planOrder.indexOf(profile?.plan ?? 'free')
+  const requiredPlanIndex = planOrder.indexOf(modelPricing.min_plan ?? 'free')
+
+  if (userPlanIndex < requiredPlanIndex) {
+    return NextResponse.json(
+      { error: `This model requires the ${modelPricing.min_plan} plan or higher` },
+      { status: 403 }
+    )
+  }
 
   // Resolve AI model — fail gracefully if provider key is missing
   const model = resolveModel(modelId, modelPricing.provider)

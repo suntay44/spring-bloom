@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { createClient } from "@/lib/supabase/client";
+import { planLimit } from "@/lib/credits/limits";
 
 interface AppShellProfile {
   full_name: string | null;
@@ -40,12 +41,6 @@ const baseLink = "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-bold
 const inactiveLink = "hover:bg-zinc-800";
 const activeLink = "bg-zinc-800 text-white";
 
-const PLAN_CREDIT_LIMITS: Record<AppShellProfile["plan"], number> = {
-  free: 100,
-  starter: 500,
-  pro: 1500,
-  teams: 5000,
-};
 
 function projectIcon(type: AppShellProject["type"]) {
   if (type === "mobile") return Smartphone;
@@ -57,7 +52,7 @@ export function AppShell({ children, user, profile, balance, projects = [] }: Re
   const pathname = usePathname();
   const router = useRouter();
   const plan = profile?.plan ?? "free";
-  const creditLimit = PLAN_CREDIT_LIMITS[plan];
+  const creditLimit = planLimit(plan);
   const displayName = profile?.full_name || user.email || "Setting up profile...";
   const creditProgress = Math.min((balance / creditLimit) * 100, 100);
 
@@ -100,6 +95,11 @@ export function AppShell({ children, user, profile, balance, projects = [] }: Re
         <div className="mt-8 rounded-lg border border-zinc-800 p-4">
           <p className="font-semibold">{displayName}</p>
           <p className="mt-1 text-sm font-bold text-slate-500">{balance.toLocaleString()} credits remaining</p>
+          {balance < 10 ? (
+            <div className="mt-2 rounded-md bg-amber-950/50 px-3 py-2 text-xs font-semibold text-amber-400">
+              ⚠ Running low — {balance.toLocaleString()} credits left
+            </div>
+          ) : null}
           <Progress className="mt-2 h-1.5" value={creditProgress} />
           <Button className="mt-4 w-full" nativeButton={false} render={<Link href="/settings" />} variant="outline"><CreditCard size={17} /> Buy Credits</Button>
         </div>
