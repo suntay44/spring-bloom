@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { UIMessage } from "ai";
 import { ArrowUpRight, BarChart3, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, Laptop, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, ShieldCheck, Sparkles, Upload, type LucideIcon } from "lucide-react";
 import { ChatPanel } from "@/components/builder/ChatPanel";
@@ -13,6 +13,7 @@ import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useMachineProvisioner } from "@/hooks/useMachineProvisioner";
 import { toast } from "@/lib/toast";
 import type { MockProject, MockProjectType } from "@/lib/mock/projects";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
@@ -38,6 +39,7 @@ const TYPE_LABELS: Record<MockProjectType, string> = {
 type BuilderMockProps = {
   project: MockProject;
   initialMessages?: UIMessage[];
+  machineId: string | null;
   user: ProjectMenuUser;
 };
 
@@ -52,15 +54,16 @@ function TooltipButton({ label, ariaLabel = label, children, onClick }: { label:
   );
 }
 
-export function BuilderMock({ project, initialMessages = [], user }: BuilderMockProps) {
+export function BuilderMock({ project, initialMessages = [], machineId, user }: BuilderMockProps) {
   const [tab, setTab] = useState<BuilderTab>("Preview");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [visualEdits, setVisualEdits] = useState(false);
+  const machine = useMachineProvisioner(project.id, machineId);
   const TAB_PANELS: Record<BuilderTab, () => ReactNode> = {
-    Preview: () => <PreviewPanel project={project} />,
-    Files: () => <FilesPanel />,
+    Preview: () => <PreviewPanel machineId={machine.machineId} project={project} provisioning={machine.provisioning} />,
+    Files: () => <FilesPanel machineId={machine.machineId} />,
     Diff: () => <DiffPanel />,
     Review: () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
     Security: () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
@@ -74,6 +77,15 @@ export function BuilderMock({ project, initialMessages = [], user }: BuilderMock
       return next;
     });
   }
+
+  useEffect(() => {
+    if (!machine.machineId) return
+    function onUnload() {
+      navigator.sendBeacon(`/api/fly/machine/${machine.machineId}/stop`)
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [machine.machineId])
 
   return (
     <TooltipProvider>
@@ -139,7 +151,7 @@ export function BuilderMock({ project, initialMessages = [], user }: BuilderMock
       </header>
 
       <main className="builder-workspace">
-        {!sidebarCollapsed ? <ChatPanel initialMessages={initialMessages} projectId={project.id} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} onVisualEditsToggle={toggleVisualEdits} visualEdits={visualEdits} /> : null}
+        {!sidebarCollapsed ? <ChatPanel initialMessages={initialMessages} machineId={machine.machineId} projectId={project.id} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} onVisualEditsToggle={toggleVisualEdits} visualEdits={visualEdits} /> : null}
         <section className="preview-pane">
           <div className="preview-browser">
             {TAB_PANELS[tab]()}
