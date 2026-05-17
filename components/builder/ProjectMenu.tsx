@@ -5,6 +5,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, Gift, Globe2, HelpCircle, Pin, Search, Settings, ShieldCheck } from "lucide-react";
 import { toast } from "@/lib/toast";
+// TODO Phase 11: replace MOCK_USER with real user/profile/balance props
 import { MOCK_USER, creditPercent } from "@/lib/mock/user";
 
 export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics";

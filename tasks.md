@@ -1,503 +1,647 @@
 # Wild Cupcake — Codex Task List
 
 > **How to use**: Work tasks top-to-bottom within each phase. Mark done by changing `[ ]` to `[x]`.
-> After each phase, run `npm run typecheck` and verify the dev server renders correctly before moving on.
+> After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Context**: UI-first gate — final frontend branch before backend work begins.
-> All data remains mock/placeholder. Do NOT wire real APIs.
->
-> **Status**: Phases A–E complete. These phases are the final frontend work.
-> **Order**: F → G → J → H → I
+> **Status**: UI/UX gate passed. All frontend phases complete. Backend work begins here.
+> **Current phase**: Phase 10 — Platform Supabase Schema + Real Auth
 
 ---
 
-## ── PHASE F ── Code Review Bug Fixes
+## ── COMPLETED ── Frontend Phases (F · G · J · H · I)
+
+All frontend work complete and merged. UI/UX gate accepted.
+Do not re-open these phases.
 
 ---
 
-### F.1 — Fix `HeroCTAButtons` hard navigation
+## ── PHASE 10 ── Platform Supabase Schema + Real Auth
 
-**Problem**: Uses `window.location.href = "/new"` — triggers a full browser reload. Every other navigation uses `router.push()`.
+**Goal**: Replace MockAuthContext with real Supabase Auth. Wire signup/login.
+Create the full platform DB schema. Protect routes with middleware.
 
-- [x] In `components/marketing/HeroCTAButtons.tsx`:
-  - Add `import { useRouter } from "next/navigation"`.
-  - Add `const router = useRouter()` inside the component.
-  - Replace `window.location.href = "/new"` with `router.push("/new")`.
-
----
-
-### F.2 — Merge duplicate `@media (max-width: 768px)` blocks in `globals.css`
-
-**Problem**: Two separate `768px` blocks exist — one added in Phase C (line ~1834), one pre-existing (line ~1910) for `.builder-chrome`. Same breakpoint, two blocks.
-
-- [x] In `app/globals.css`:
-  - Find both `@media (max-width: 768px)` blocks.
-  - Move all rules from the second block into the first.
-  - Delete the now-empty second block.
-  - Verify: exactly one `@media (max-width: 768px)` block remains.
+**Pre-requisites** (must be done by the project owner before Codex runs this phase):
+- Supabase project created at supabase.com
+- `.env.local` populated with:
+  ```
+  NEXT_PUBLIC_SUPABASE_URL=https://[ref].supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...
+  SUPABASE_SERVICE_ROLE_KEY=eyJ...
+  ```
 
 ---
 
-### F.3 — Fix `TAB_PANELS` reconciliation for `FindingsPanel`
+### 10.1 — Install Supabase packages
 
-**Problem**: `Review` and `Security` both render `<FindingsPanel>` at the same tree position. React reconciles instead of remounting — internal state (scroll, expanded rows) persists across tab switches.
-
-- [x] In `components/builder/BuilderMock.tsx`:
-  - Change `TAB_PANELS` from `Record<BuilderTab, ReactNode>` to `Record<BuilderTab, () => ReactNode>`:
-    ```tsx
-    const TAB_PANELS: Record<BuilderTab, () => React.ReactNode> = {
-      Preview: () => <PreviewPanel project={project} />,
-      Files: () => <FilesPanel />,
-      Diff: () => <DiffPanel />,
-      Review: () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
-      Security: () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
-      Analytics: () => <AnalyticsPanel />,
-    };
-    ```
-  - Update render site: `{TAB_PANELS[tab]()}`.
-  - Run `npm run typecheck` — zero errors.
+- [ ] Run:
+  ```bash
+  pnpm add @supabase/supabase-js @supabase/ssr
+  ```
+- [ ] Verify no version conflicts: `pnpm typecheck` passes before continuing.
 
 ---
 
-## ── PHASE G ── Project Type Awareness in Builder
+### 10.2 — Create Supabase browser client
 
-**Background**: `MOCK_PROJECTS` already has `type: "mobile" | "fullstack" | "landing"` and `framework: "expo" | "nextjs" | "static"`. The builder must use this data to drive preview behavior.
+- [ ] Create `lib/supabase/client.ts`:
+  ```typescript
+  import { createBrowserClient } from '@supabase/ssr'
 
-- `mobile` → phone frame only. No web preview tab.
-- `fullstack` / `landing` → viewport toggle: Desktop / Tablet / Mobile (width resize, not platform switch).
-
----
-
-### G.1 — Pass project into `BuilderMock` from the page
-
-**Problem**: `app/(builder)/builder/[projectId]/page.tsx` doesn't read `params.projectId` or look up the project. `BuilderMock` has no project context.
-
-- [x] In `app/(builder)/builder/[projectId]/page.tsx`:
-  ```tsx
-  import { MOCK_PROJECTS } from "@/lib/mock/projects";
-  import { BuilderMock } from "@/components/builder/BuilderMock";
-
-  export default function BuilderPage({ params }: { params: { projectId: string } }) {
-    const project = MOCK_PROJECTS.find((p) => p.id === params.projectId);
-    if (!project) {
-      return <div className="grid h-screen place-items-center text-slate-500">Project not found</div>;
-    }
-    return <BuilderMock project={project} />;
+  export function createClient() {
+    return createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+    )
   }
   ```
 
-- [x] In `components/builder/BuilderMock.tsx`:
-  - Import `MockProject` from `@/lib/mock/projects`.
-  - Add `project: MockProject` to `BuilderMockProps` (or define the props type if missing).
-  - Pass `project` down to `PreviewPanel` (used in G.2): `Preview: () => <PreviewPanel project={project} />`.
-  - Find where the project name/title is shown in the builder chrome header. Replace any hardcoded name with `{project.name}`.
-
 ---
 
-### G.2 — Make `PreviewPanel` type-aware
+### 10.3 — Create Supabase server client
 
-**Problem**: `PreviewPanel` always shows both "Web" and "Mobile" tabs regardless of project type. `healthtech-proto` is `type: "mobile"` but shows the Kanban web preview under "Web".
+- [ ] Create `lib/supabase/server.ts`:
+  ```typescript
+  import { createServerClient } from '@supabase/ssr'
+  import { cookies } from 'next/headers'
 
-**Correct behavior:**
-
-| `project.type` | Preview |
-|---|---|
-| `"mobile"` | Render `<MobilePreview />` directly. No tab bar. |
-| `"fullstack"` / `"landing"` | Viewport toggle: `Desktop` / `Tablet` / `Mobile`. Resizes a container around `<WebPreview />`. |
-
-- [x] In `components/builder/panels/PreviewPanel.tsx`:
-  - Add `project: MockProject` to props.
-  - Add viewport state for web projects:
-    ```tsx
-    type Viewport = "desktop" | "tablet" | "mobile";
-    const VIEWPORT_WIDTHS: Record<Viewport, string> = {
-      desktop: "100%",
-      tablet: "768px",
-      mobile: "390px",
-    };
-    ```
-  - Icons for the viewport toggle: `Monitor` (desktop), `Tablet` (tablet), `Smartphone` (mobile) — all from lucide-react.
-  - **If `project.type === "mobile"`**: render `<MobilePreview />` directly. No tab bar. Remove the old `"web" | "mobile"` state entirely.
-  - **If `project.type !== "mobile"`**: render the three-button viewport toggle above `<WebPreview />`. Wrap `<WebPreview />` in a centered container with `style={{ maxWidth: VIEWPORT_WIDTHS[viewport] }}` and `mx-auto transition-all`.
-
----
-
-### G.3 — Show project type badge in builder header
-
-- [x] In `components/builder/BuilderMock.tsx`:
-  - Add a `TYPE_LABELS` map:
-    ```tsx
-    const TYPE_LABELS: Record<MockProjectType, string> = {
-      mobile: "Expo · Mobile",
-      fullstack: "Next.js · Fullstack",
-      landing: "Static · Landing",
-    };
-    ```
-  - Next to the project name in the builder chrome, render:
-    `<span className="pill">{TYPE_LABELS[project.type]}</span>`
-
----
-
-## ── PHASE J ── shadcn/ui Migration
-
-**Goal**: Replace hand-rolled interactive components with shadcn/ui. Keep all layout and builder-specific CSS exactly as-is.
-
-**What changes**: Button, Badge, Dialog (AuthModal), Tabs (settings), Progress (credit bar), Tooltip (icon buttons), Sonner (toast — replaces Phase H.1's custom Toast).
-
-**What does NOT change**: `.app-layout`, `.sidebar`, `.builder-chrome`, `.hero`, `.grid-3`, `.grid-4`, `.tool-tab`, `.tool-btn`, `.circle-btn`, `.chip-btn`, `.kanban-grid`, `.sample-app`, `.project-table-row`, and all other layout/builder CSS classes. Those stay in `globals.css` untouched.
-
----
-
-### J.1 — Install and initialise shadcn
-
-- [x] Run:
-  ```bash
-  pnpm dlx shadcn@latest init
-  ```
-  When prompted:
-  - Style: **Default**
-  - Base color: **Zinc**
-  - CSS variables: **Yes**
-
-- [x] Add the required components:
-  ```bash
-  pnpm dlx shadcn@latest add button badge dialog tabs progress tooltip sonner separator input label textarea dropdown-menu
+  export async function createClient() {
+    const cookieStore = await cookies()
+    return createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        cookies: {
+          getAll: () => cookieStore.getAll(),
+          setAll: (cookiesToSet) =>
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            ),
+        },
+      }
+    )
+  }
   ```
 
-- [x] Verify `components/ui/` folder now exists with the added components.
-- [x] Run `npm run typecheck` — zero errors before continuing.
-
 ---
 
-### J.2 — Replace `.button` classes with `<Button>`
+### 10.4 — Create root middleware for auth protection
 
-**Mapping:**
+- [ ] Create `middleware.ts` at the project root:
+  ```typescript
+  import { createServerClient } from '@supabase/ssr'
+  import { NextResponse, type NextRequest } from 'next/server'
 
-| Current class | shadcn equivalent |
-|---|---|
-| `className="button"` | `<Button>` (default variant) |
-| `className="button blue"` | `<Button>` (default — blue is the default) |
-| `className="button secondary"` | `<Button variant="outline">` |
-| `className="button secondary mt-4 w-full"` | `<Button variant="outline" className="mt-4 w-full">` |
-| `className="button blue w-full"` | `<Button className="w-full">` |
+  export async function middleware(request: NextRequest) {
+    let supabaseResponse = NextResponse.next({ request })
 
-**Do NOT replace**: `.icon-btn`, `.tool-btn`, `.circle-btn`, `.chip-btn`, `.menu-row` — these are builder/toolbar-specific and stay custom.
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+      {
+        cookies: {
+          getAll: () => request.cookies.getAll(),
+          setAll: (cookiesToSet) => {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              request.cookies.set(name, value)
+            )
+            supabaseResponse = NextResponse.next({ request })
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            )
+          },
+        },
+      }
+    )
 
-- [x] In each of these files, import `Button` from `@/components/ui/button` and replace `.button` usages:
-  - `components/auth/AuthModal.tsx`
-  - `components/marketing/Navbar.tsx`
-  - `components/marketing/HeroCTAButtons.tsx`
-  - `components/marketing/PricingSection.tsx`
-  - `components/layout/AppShell.tsx`
-  - `components/new-project/ProjectBriefModal.tsx`
-  - `components/settings/sections/AccountSection.tsx`
-  - `components/settings/sections/BillingSection.tsx`
-  - `components/settings/sections/DangerSection.tsx`
-  - `components/builder/BuilderMock.tsx` (Share button only)
+    // Use getClaims() NOT getSession() — getSession() is not safe server-side
+    const { data: { user } } = await supabase.auth.getUser()
 
-- [x] Run `npm run typecheck` after this step.
+    const { pathname } = request.nextUrl
 
----
+    const protectedPaths = ['/dashboard', '/new', '/builder', '/settings']
+    const isProtected = protectedPaths.some((p) => pathname.startsWith(p))
 
-### J.3 — Replace `.pill` spans with `<Badge>`
-
-**Mapping:**
-
-| Current | shadcn equivalent |
-|---|---|
-| `<span className="pill">text</span>` | `<Badge variant="secondary">text</Badge>` |
-| `<button className="pill" ...>chip</button>` | Keep as-is — prompt chips are interactive, not badges |
-
-- [x] In each file, import `Badge` from `@/components/ui/badge` and replace static `.pill` spans:
-  - `components/layout/AppShell.tsx` (plan + credits pills in topbar)
-  - `components/auth/AuthModal.tsx` (selected plan pill)
-  - `components/shared/PromptToolbar.tsx` (E-1, Maxx off pills)
-  - `components/settings/sections/AnalyticsSection.tsx` (event name pills)
-  - `components/builder/BuilderMock.tsx` (type badge from G.3)
-
-- [x] `<button className="pill">` prompt chips in `NewProjectClient.tsx` — leave as-is (they are clickable chips, not badges).
-
----
-
-### J.4 — Replace `AuthModal` custom modal with `<Dialog>`
-
-**Why**: `<Dialog>` from shadcn/Radix gives focus trapping, `aria-modal`, Escape key, scroll lock, and backdrop click for free — replacing the manual `useEffect` wiring in `AuthModal`.
-
-- [x] In `components/auth/AuthModal.tsx`:
-  - Import `Dialog, DialogContent, DialogHeader, DialogTitle` from `@/components/ui/dialog`.
-  - Remove the `useEffect` that manually wires `onKeyDown` (Escape) and `document.body.style.overflow` — `<Dialog>` handles both.
-  - Remove the manual backdrop `<div>` click handler.
-  - Wrap the modal content in:
-    ```tsx
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{defaultTab === "signup" ? "Create your account" : "Welcome back"}</DialogTitle>
-        </DialogHeader>
-        {/* existing form content */}
-      </DialogContent>
-    </Dialog>
-    ```
-  - Replace `<input>` elements with `<Input>` from `@/components/ui/input`.
-  - Replace `<label>` elements with `<Label>` from `@/components/ui/label`.
-  - Keep the `email`, `password`, `canSubmit` controlled state — just swap the elements.
-
----
-
-### J.5 — Replace custom `TabBar` with shadcn `<Tabs>`
-
-**Scope**: Settings tabs and the "Recent Tasks | Deployed Apps" tab header in `NewProjectClient`. Builder toolbar tabs (`.tool-tab`) stay custom — they have icons and are part of the builder chrome.
-
-- [x] In `components/shared/TabBar.tsx`:
-  - Rewrite to use shadcn `<Tabs>`, `<TabsList>`, `<TabsTrigger>`:
-    ```tsx
-    import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-    export function TabBar<T extends string>({ tabs, value, onChange }: TabBarProps<T>) {
-      return (
-        <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
-          <TabsList>
-            {tabs.map((tab) => (
-              <TabsTrigger key={tab} value={tab}>{tab}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      );
+    if (isProtected && !user) {
+      const loginUrl = request.nextUrl.clone()
+      loginUrl.pathname = '/login'
+      return NextResponse.redirect(loginUrl)
     }
-    ```
-  - This keeps the same `TabBar` API — callers (`SettingsMock`, etc.) don't change.
 
----
+    // Redirect logged-in users away from auth pages
+    if (user && (pathname === '/login' || pathname === '/signup')) {
+      const newUrl = request.nextUrl.clone()
+      newUrl.pathname = '/new'
+      return NextResponse.redirect(newUrl)
+    }
 
-### J.6 — Add `<Progress>` to credit meter in `AppShell`
+    return supabaseResponse
+  }
 
-- [x] In `components/layout/AppShell.tsx`:
-  - Import `Progress` from `@/components/ui/progress`.
-  - Below the credits text (`{MOCK_USER.credits.toLocaleString()} credits remaining`), add:
-    ```tsx
-    <Progress value={(MOCK_USER.credits / 1500) * 100} className="mt-2 h-1.5" />
-    ```
-  - The `1500` total is `MOCK_USER.creditsTotal` if that field exists on `MOCK_USER`, otherwise hardcode for now.
-
-- [x] In `components/settings/sections/BillingSection.tsx`:
-  - Replace the existing `.credit-meter` div with `<Progress>` using the same value calculation.
-
----
-
-### J.7 — Add `<Tooltip>` to icon buttons in builder
-
-Currently icon buttons have `title` attributes (browser tooltip, inconsistent across OS). Replace with shadcn `<Tooltip>` for consistent styling.
-
-- [x] In `components/builder/BuilderMock.tsx`:
-  - Import `Tooltip, TooltipContent, TooltipProvider, TooltipTrigger` from `@/components/ui/tooltip`.
-  - Wrap the root return in `<TooltipProvider>`.
-  - Wrap each `.tool-btn` button that has a `title` attribute in:
-    ```tsx
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button className="tool-btn" type="button" aria-label="...">
-          <Icon size={16} />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-    ```
-  - Remove the `title` attribute from each button once wrapped (tooltip replaces it).
-  - Apply to: Run history, Open preview, Refresh preview, Comments, Share, GitHub, Publish.
-
----
-
-### J.8 — Install Sonner and wire up root layout
-
-Sonner replaces the custom `Toast` system. **Do not create `components/shared/Toast.tsx`** from Phase H — Sonner covers it entirely.
-
-- [x] In `app/layout.tsx`:
-  - Import `Toaster` from `sonner`.
-  - Add `<Toaster position="bottom-right" richColors />` just before `</body>`.
-
-- [x] Create `lib/toast.ts` as a thin re-export so callers import from one place:
-  ```ts
-  export { toast } from "sonner";
+  export const config = {
+    matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhooks).*)'],
+  }
   ```
 
-- [x] Run `npm run typecheck` — zero errors.
-
 ---
 
-### J.9 — Verification
+### 10.5 — Run database schema in Supabase SQL editor
 
-- [x] `npm run typecheck` — zero errors.
-- [x] `/` — marketing page renders, buttons use `<Button>`, pills use `<Badge>`.
-- [x] "Start Building" (hero) → `<Dialog>` opens with focus trapped inside (tab key cycles within modal only).
-- [x] Escape key closes `<Dialog>`.
-- [x] `/settings` — tab bar uses shadcn `<Tabs>`, all 6 tabs switch correctly.
-- [x] `/new` — prompt chips still work (still `.pill` buttons, not `<Badge>`).
-- [x] `AppShell` sidebar — credit `<Progress>` bar renders.
-- [x] Builder tooltip appears on hover over icon buttons.
-- [x] No visual regressions on layout classes (`.app-layout`, `.hero`, etc. unchanged).
+Copy and run each block in order in the Supabase dashboard → SQL Editor.
 
----
-
-## ── PHASE H ── Button Interactivity (Dummy Feedback)
-
-**Note**: Phase J (Sonner) must be complete before this phase. Import `toast` from `@/lib/toast` in all files below — do not create a custom Toast component.
-
-**Goal**: Every button on every page does something visible when clicked.
-
----
-
-### H.1 — Wire dead buttons in `BuilderMock.tsx`
-
-- [x] In `components/builder/BuilderMock.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-  - Add `onClick` to each dead toolbar button:
-
-  | Button | Action |
-  |---|---|
-  | `<History>` Run history | `toast("Run history — coming soon")` |
-  | `<ArrowUpRight>` Open preview | `window.open("/", "_blank"); toast("Opening preview in new tab...")` |
-  | `<RefreshCw>` Refresh | `toast("Preview refreshed")` |
-  | `<MessageSquare>` Comments | `toast("Comments — coming soon")` |
-  | `<Share2>` Share | `toast("Share link copied: https://wildca.ke/share/demo123")` |
-  | `<Github>` GitHub | `toast("Connect GitHub in Settings → Integrations")` |
-
----
-
-### H.2 — Wire dead buttons in `ChatPanel.tsx`
-
-- [x] In `components/builder/ChatPanel.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-  - Lift `messages` state up into `BuilderMock`: change `const [messages, setMessages] = useState(MOCK_MESSAGES)` in `BuilderMock`, pass `messages` and `onSend` down as props.
-  - Add `onSend: () => void` to `ChatPanelProps`.
-
-  **Canned AI responses** (define in `BuilderMock`, cycle through):
-  ```tsx
-  const MOCK_AI_RESPONSES = [
-    "Done! I've updated the component. Check the Files tab for the diff.",
-    "The Kanban board now supports drag-and-drop. Preview refreshed.",
-    "Added the billing table to the dashboard. 3 files updated.",
-  ] as const;
+- [ ] **Block 1: profiles**
+  ```sql
+  create table public.profiles (
+    id uuid references auth.users(id) on delete cascade primary key,
+    full_name text,
+    avatar_url text,
+    plan text default 'free' check (plan in ('free','starter','pro','teams')),
+    fly_machine_id text,
+    fly_app_name text,
+    supabase_project_ref text,
+    supabase_project_url text,
+    supabase_anon_key text,
+    supabase_service_role_key text,
+    created_at timestamptz default now()
+  );
+  alter table public.profiles enable row level security;
+  create policy "users own their profile"
+    on public.profiles for all using (auth.uid() = id);
   ```
 
-  | Button | Action |
-  |---|---|
-  | `<Zap>` Send | Append next `MOCK_AI_RESPONSES` entry to messages, cycle with index |
-  | `+` Attach file | `toast("File upload — coming soon")` |
-  | `<Paintbrush>` Visual edits | Toggle `visualEdits` boolean state in `BuilderMock`, pass as prop; show active class when on. `toast("Visual edits on")` / `toast("Visual edits off")` |
-  | `Build ▾` | Toggle a small dropdown (3 options: Build / Preview only / Deploy). Each: `toast("Starting {option}...")` |
-  | `<Mic>` Voice | `toast("Voice input — coming soon")` |
+- [ ] **Block 2: projects**
+  ```sql
+  create table public.projects (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references auth.users(id) on delete cascade not null,
+    name text not null,
+    description text,
+    type text not null check (type in ('fullstack','mobile','landing')),
+    framework text not null check (framework in ('nextjs','expo','static')),
+    status text default 'draft' check (status in ('draft','building','live','error')),
+    backend_mode text default 'managed_supabase'
+      check (backend_mode in ('managed_supabase','own_supabase','decide_later')),
+    fly_port integer,
+    db_schema text,
+    deploy_url text,
+    github_url text,
+    vercel_project_id text,
+    design_style text,
+    primary_color text,
+    dark_mode text default 'light',
+    forked_from uuid references public.projects(id),
+    is_public boolean default false,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+  );
+  alter table public.projects enable row level security;
+  create policy "users own their projects"
+    on public.projects for all using (auth.uid() = user_id);
+  ```
+
+- [ ] **Block 3: project_briefs**
+  ```sql
+  create table public.project_briefs (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    user_id uuid references auth.users(id) on delete cascade not null,
+    initial_prompt text not null,
+    answers jsonb not null,
+    prd jsonb not null,
+    estimated_credits numeric(10,4) not null default 0,
+    approved_at timestamptz,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+  );
+  alter table public.project_briefs enable row level security;
+  create policy "users own their project briefs"
+    on public.project_briefs for all using (auth.uid() = user_id);
+  ```
+
+- [ ] **Block 4: messages**
+  ```sql
+  create table public.messages (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    role text not null check (role in ('user','assistant','system')),
+    content text not null,
+    model_id text,
+    credits_used numeric(10,4) default 0,
+    created_at timestamptz default now()
+  );
+  alter table public.messages enable row level security;
+  create policy "users own their messages"
+    on public.messages for all
+    using (exists (
+      select 1 from public.projects
+      where id = messages.project_id and user_id = auth.uid()
+    ));
+  ```
+
+- [ ] **Block 5: agent_runs**
+  ```sql
+  create table public.agent_runs (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    user_id uuid references auth.users(id) on delete cascade not null,
+    project_brief_id uuid references public.project_briefs(id),
+    parent_message_id uuid references public.messages(id),
+    status text default 'queued'
+      check (status in ('queued','planning','building','reviewing','scanning','completed','failed','cancelled')),
+    prompt text not null,
+    model_provider text not null default 'anthropic'
+      check (model_provider in ('anthropic','openai','google')),
+    model_id text not null default 'claude-sonnet-4-5',
+    model_label text not null default 'Claude Sonnet 4.5',
+    plan jsonb,
+    changed_files jsonb default '[]'::jsonb,
+    commands jsonb default '[]'::jsonb,
+    estimated_credits numeric(10,4) not null default 0,
+    held_credits numeric(10,4) not null default 0,
+    final_credits numeric(10,4) not null default 0,
+    tokens_input int,
+    tokens_output int,
+    started_at timestamptz default now(),
+    finished_at timestamptz
+  );
+  alter table public.agent_runs enable row level security;
+  create policy "users own their agent runs"
+    on public.agent_runs for all using (auth.uid() = user_id);
+  ```
+
+- [ ] **Block 6: model_pricing**
+  ```sql
+  create table public.model_pricing (
+    model_id               text primary key,
+    display_name           text not null,
+    provider               text not null check (provider in ('anthropic','openai','google')),
+    credits_per_1m_input   numeric(8,4) not null,
+    credits_per_1m_output  numeric(8,4) not null,
+    min_plan               text not null check (min_plan in ('free','starter','pro','teams')),
+    is_active              boolean default true
+  );
+  -- Public read (no auth required to fetch model list)
+  alter table public.model_pricing enable row level security;
+  create policy "anyone can read model pricing"
+    on public.model_pricing for select using (true);
+
+  -- Seed: 1 credit = $0.17 USD
+  insert into public.model_pricing values
+    ('claude-haiku-4-5',    'Claude Haiku 4.5',     'anthropic', 5.88,  29.41, 'free',    true),
+    ('claude-sonnet-4-5',   'Claude Sonnet 4.5',    'anthropic', 17.65, 88.24, 'free',    true),
+    ('claude-sonnet-4-6',   'Claude Sonnet 4.6',    'anthropic', 17.65, 88.24, 'free',    true),
+    ('claude-opus-4-5',     'Claude Opus 4.5',      'anthropic', 29.41, 147.06,'starter', true),
+    ('gpt-4-1-nano',        'GPT-4.1 Nano',         'openai',    0.59,  2.35,  'free',    true),
+    ('gpt-5-4-mini',        'GPT-5.4 Mini',         'openai',    4.41,  26.47, 'starter', true),
+    ('gpt-5-4-standard',    'GPT-5.4 Standard',     'openai',    14.71, 88.24, 'pro',     true),
+    ('gpt-5-5',             'GPT-5.5',              'openai',    29.41, 176.47,'teams',   true),
+    ('o3',                  'o3',                   'openai',    11.76, 47.06, 'pro',     true),
+    ('gemini-2-5-flash',    'Gemini 2.5 Flash',     'google',    1.76,  14.71, 'free',    true),
+    ('gemini-2-5-pro',      'Gemini 2.5 Pro',       'google',    7.35,  58.82, 'starter', true);
+  ```
+
+- [ ] **Block 7: credit_transactions**
+  ```sql
+  create table public.credit_transactions (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references auth.users(id) on delete cascade not null,
+    project_id uuid references public.projects(id),
+    agent_run_id uuid references public.agent_runs(id),
+    run_id uuid,
+    type text not null
+      check (type in ('purchase','hold','deduct','refund','bonus','expire','monthly_reset')),
+    amount numeric(10,4) not null,
+    model_id text,
+    tokens_input int,
+    tokens_output int,
+    price_paid_usd numeric(8,2),
+    stripe_session_id text,
+    metadata jsonb default '{}'::jsonb,
+    created_at timestamptz default now()
+  );
+  alter table public.credit_transactions enable row level security;
+  create policy "users own their transactions"
+    on public.credit_transactions for all using (auth.uid() = user_id);
+
+  create view public.user_credit_balance as
+    select user_id, sum(amount) as balance
+    from public.credit_transactions
+    group by user_id;
+  ```
+
+- [ ] **Block 8: review_runs + review_findings**
+  ```sql
+  create table public.review_runs (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    agent_run_id uuid references public.agent_runs(id) on delete cascade,
+    score integer check (score between 0 and 100),
+    status text default 'pending'
+      check (status in ('pending','passed','passed_with_risks','failed')),
+    summary text,
+    credits_used numeric(10,4) default 0,
+    created_at timestamptz default now()
+  );
+  alter table public.review_runs enable row level security;
+  create policy "users own their review runs"
+    on public.review_runs for all
+    using (exists (select 1 from public.projects where id = review_runs.project_id and user_id = auth.uid()));
+
+  create table public.review_findings (
+    id uuid primary key default gen_random_uuid(),
+    review_run_id uuid references public.review_runs(id) on delete cascade not null,
+    severity text not null check (severity in ('blocker','risk','suggestion','passed')),
+    category text not null,
+    file_path text,
+    line_number integer,
+    title text not null,
+    details text,
+    status text default 'open' check (status in ('open','fixed','accepted','dismissed')),
+    created_at timestamptz default now()
+  );
+  alter table public.review_findings enable row level security;
+  create policy "users own their review findings"
+    on public.review_findings for all
+    using (exists (
+      select 1 from public.review_runs rr
+      join public.projects p on p.id = rr.project_id
+      where rr.id = review_findings.review_run_id and p.user_id = auth.uid()
+    ));
+  ```
+
+- [ ] **Block 9: security_scans + security_findings**
+  ```sql
+  create table public.security_scans (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    agent_run_id uuid references public.agent_runs(id) on delete cascade,
+    status text default 'pending'
+      check (status in ('pending','clean','needs_attention','blocked','failed')),
+    scanner_version text,
+    credits_used numeric(10,4) default 0,
+    created_at timestamptz default now()
+  );
+  alter table public.security_scans enable row level security;
+  create policy "users own their security scans"
+    on public.security_scans for all
+    using (exists (select 1 from public.projects where id = security_scans.project_id and user_id = auth.uid()));
+
+  create table public.security_findings (
+    id uuid primary key default gen_random_uuid(),
+    security_scan_id uuid references public.security_scans(id) on delete cascade not null,
+    severity text not null check (severity in ('critical','high','medium','low','info')),
+    category text not null,
+    file_path text,
+    line_number integer,
+    title text not null,
+    details text,
+    fix_prompt text,
+    status text default 'open' check (status in ('open','fixed','accepted_risk','dismissed')),
+    created_at timestamptz default now()
+  );
+  alter table public.security_findings enable row level security;
+  create policy "users own their security findings"
+    on public.security_findings for all
+    using (exists (
+      select 1 from public.security_scans ss
+      join public.projects p on p.id = ss.project_id
+      where ss.id = security_findings.security_scan_id and p.user_id = auth.uid()
+    ));
+  ```
+
+- [ ] **Block 10: analytics_events + project_snapshots**
+  ```sql
+  create table public.analytics_events (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid references auth.users(id) on delete cascade,
+    project_id uuid references public.projects(id) on delete cascade,
+    source text not null check (source in ('platform','generated_app')),
+    event_name text not null,
+    properties jsonb default '{}'::jsonb,
+    session_id text,
+    created_at timestamptz default now()
+  );
+  alter table public.analytics_events enable row level security;
+  create policy "users own their analytics events"
+    on public.analytics_events for all
+    using (
+      auth.uid() = user_id or
+      exists (select 1 from public.projects where id = analytics_events.project_id and user_id = auth.uid())
+    );
+
+  create table public.project_snapshots (
+    id uuid primary key default gen_random_uuid(),
+    project_id uuid references public.projects(id) on delete cascade not null,
+    file_tree jsonb not null,
+    taken_at timestamptz default now()
+  );
+  alter table public.project_snapshots enable row level security;
+  create policy "users own their snapshots"
+    on public.project_snapshots for all
+    using (exists (select 1 from public.projects where id = project_snapshots.project_id and user_id = auth.uid()));
+  ```
+
+- [ ] **Block 11: profile auto-create trigger**
+  ```sql
+  -- Auto-create profile row when a user signs up
+  create or replace function public.handle_new_user()
+  returns trigger as $$
+  begin
+    insert into public.profiles (id, full_name, avatar_url)
+    values (
+      new.id,
+      new.raw_user_meta_data->>'full_name',
+      new.raw_user_meta_data->>'avatar_url'
+    );
+    -- Give new users 5 free credits
+    insert into public.credit_transactions (user_id, type, amount, metadata)
+    values (new.id, 'bonus', 5, '{"reason": "signup_bonus"}'::jsonb);
+    return new;
+  end;
+  $$ language plpgsql security definer;
+
+  create trigger on_auth_user_created
+    after insert on auth.users
+    for each row execute procedure public.handle_new_user();
+  ```
 
 ---
 
-### H.3 — Wire dead buttons in `PromptToolbar.tsx`
+### 10.6 — Remove MockAuthContext, replace with real Supabase Auth
 
-- [x] In `components/shared/PromptToolbar.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-
-  | Button | `toast(...)` |
-  |---|---|
-  | `<Paperclip>` Attach | `"File upload — coming soon"` |
-  | `<Github>` GitHub | `"Connect GitHub in Settings → Integrations"` |
-  | `<SlidersHorizontal>` Settings | `"Prompt settings — coming soon"` |
-  | `<Mic>` Voice | `"Voice input — coming soon"` |
+- [ ] Delete `context/MockAuthContext.tsx` entirely.
+- [ ] Delete `components/shared/AuthGuard.tsx` entirely.
+- [ ] In `app/layout.tsx`:
+  - Remove `import { MockAuthProvider }` and `<MockAuthProvider>` wrapper.
+  - The layout should just render `{children}` inside `<body>` (middleware handles auth).
+  - Keep `<Toaster />` from Sonner.
 
 ---
 
-### H.4 — Wire dead buttons in Settings sections
+### 10.7 — Wire signup form to Supabase
 
-- [x] In `components/settings/sections/AccountSection.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-  - `"Change password"` → `toast("Password reset link sent to your email")`
-  - `"Upgrade to Agency"` → `toast("Redirecting to upgrade flow...")`
+- [ ] In `app/(auth)/signup/page.tsx` (or wherever the signup form lives):
+  ```typescript
+  'use client'
+  import { createClient } from '@/lib/supabase/client'
+  import { useRouter } from 'next/navigation'
 
-- [x] In `components/settings/sections/BillingSection.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-  - `"Buy Credits"` → `toast("Opening credit checkout...")`
-  - Credit pack cards → `toast("Added {pack} to cart")`
-  - `"Manage billing"` → `toast("Opening billing portal...")`
-
----
-
-### H.5 — Wire dead buttons in `ProjectMenu.tsx`
-
-- [x] In `components/builder/ProjectMenu.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-  - Publish/deploy button → `toast("Deploying to Vercel... (mock)")`
-  - `MoreToolsMenu` items with no `tab` → replace `undefined` with `() => toast(\`${item.label} — coming soon\`)`.
-    Change: `onClick={() => item.tab ? setTab(item.tab) : undefined}`
-    To: `onClick={() => item.tab ? setTab(item.tab) : toast(\`${item.label} — coming soon\`)}`
+  // On form submit:
+  const supabase = createClient()
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: name } },
+  })
+  if (error) { /* show error toast */ return }
+  router.push('/new')
+  ```
+- [ ] Show `toast.error(error.message)` on failure.
+- [ ] Show `toast.success("Account created!")` on success.
+- [ ] Button shows spinner while submitting (disabled during async).
 
 ---
 
-### H.6 — Wire filter button in `NewProjectClient.tsx`
+### 10.8 — Wire login form to Supabase
 
-- [x] In `components/new-project/NewProjectClient.tsx`:
-  - Import `{ toast }` from `@/lib/toast`.
-  - `<Settings2>` filter button → `onClick={() => toast("Filter — coming soon")}`.
-
----
-
-## ── PHASE I ── End-to-End Verification
-
-Final gate before this branch is closed and backend work begins.
+- [ ] In `app/(auth)/login/page.tsx`:
+  ```typescript
+  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  if (error) { toast.error(error.message); return }
+  router.push('/new')
+  ```
+- [ ] Same spinner + toast pattern as signup.
 
 ---
 
-### I.1 — Full click-path check
+### 10.9 — Wire logout
 
-**Auth + creation flow**
-- [x] `/` → "Start Building" (hero) → `<Dialog>` opens (focus trapped, Escape closes it)
-- [x] `/` → Navbar "Login" → `<Dialog>` opens
-- [x] `AuthModal` → type email + password → button enables → sign in → navigates to `/new`
-- [x] `/new` → type prompt → send → `ProjectBriefModal` opens → 5 steps → PRD shows user's prompt text → "Start Building" → builder
+- [ ] In `components/layout/AppShell.tsx` (or wherever the user menu is):
+  ```typescript
+  const supabase = createClient()
+  await supabase.auth.signOut()
+  router.push('/login')
+  ```
+- [ ] Wire to the "Sign out" menu item or button.
 
-**Builder — project type**
-- [x] `/builder/healthtech-proto` → Preview tab → phone frame only, no Web tab (`type: "mobile"`)
-- [x] `/builder/crm-counterpart` → Preview tab → Desktop/Tablet/Mobile viewport toggle (`type: "fullstack"`)
-- [x] `/builder/bill-generator` → Preview tab → Desktop/Tablet/Mobile viewport toggle (`type: "landing"`)
-- [x] Viewport toggle: Desktop = full width, Tablet = 768px centered, Mobile = 390px centered
+---
 
-**Builder — button feedback**
-- [x] Refresh button → toast "Preview refreshed"
-- [x] Share button → toast with fake share URL
-- [x] Send (Zap) → mock AI reply appends to chat
-- [x] Visual edits → button toggles active state
-- [x] Build dropdown → options appear
-- [x] GitHub button → toast "Connect GitHub in Settings"
+### 10.10 — Replace mock user with real session data
 
-**Settings**
-- [x] Settings → `<Tabs>` tab bar switches all 6 panels correctly
-- [x] Settings → Billing → "Buy Credits" → toast fires
-- [x] Settings → Account → "Change password" → toast fires
-- [x] Credit `<Progress>` bar visible in sidebar and billing section
+- [ ] In `components/layout/AppShell.tsx`:
+  - Replace `MOCK_USER` with real data. Fetch in the server component or pass as prop:
+    ```typescript
+    // In app/(app)/layout.tsx (server component):
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, plan')
+      .eq('id', user!.id)
+      .single()
+    const { data: balanceRow } = await supabase
+      .from('user_credit_balance')
+      .select('balance')
+      .eq('user_id', user!.id)
+      .single()
+    ```
+  - Pass `user`, `profile`, `balance` as props to `AppShell`.
+  - Display real name, plan, and credit balance.
+  - If `profile` is null (new user, trigger hasn't fired yet): show loading state, not crash.
 
-**shadcn components**
-- [x] `<Dialog>` focus trap: Tab key stays inside modal
-- [x] `<Dialog>` Escape key closes modal
-- [x] `<Badge>` pills visible in topbar, analytics section, auth modal
-- [x] `<Button>` renders consistently across marketing, auth, settings
-- [x] `<Tooltip>` visible on hover over builder icon buttons
-- [x] Sonner toast appears bottom-right for all wired buttons
+---
 
-**Responsive**
-- [x] 375px → `.grid-3` becomes 1 column
-- [x] 375px → auth shell shows form only
-- [x] 375px → app sidebar hidden
-- [x] `npm run typecheck` → zero errors
+### 10.11 — Create API route stubs (typed, auth-checked, empty bodies)
+
+Create each file. Each must: verify auth with `supabase.auth.getUser()`, return 401 if no user, return 200 with `{ data: null }` placeholder. No real logic yet — that's Phase 11+.
+
+- [ ] `app/api/projects/route.ts` — GET (list), POST (create)
+- [ ] `app/api/projects/[id]/route.ts` — GET, PATCH, DELETE
+- [ ] `app/api/projects/[id]/brief/route.ts` — GET, POST
+- [ ] `app/api/projects/[id]/brief/approve/route.ts` — POST
+- [ ] `app/api/projects/[id]/messages/route.ts` — GET, POST
+- [ ] `app/api/projects/[id]/agent-runs/route.ts` — GET, POST
+- [ ] `app/api/credits/route.ts` — GET balance
+- [ ] `app/api/credits/estimate/route.ts` — POST estimate
+- [ ] `app/api/models/route.ts` — GET active model list from `model_pricing` table (public, no auth required)
+
+**Pattern for each stub:**
+```typescript
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+
+export async function GET(req: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return NextResponse.json({ data: null })
+}
+```
+
+---
+
+### 10.12 — Create `GET /api/models` (real, not a stub)
+
+This endpoint is needed by the model picker in the chat UI (Phase 11).
+
+- [ ] In `app/api/models/route.ts`:
+  ```typescript
+  import { createClient } from '@/lib/supabase/server'
+  import { NextResponse } from 'next/server'
+
+  export async function GET() {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('model_pricing')
+      .select('model_id, display_name, provider, min_plan, credits_per_1m_input, credits_per_1m_output')
+      .eq('is_active', true)
+      .order('provider')
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ data })
+  }
+  ```
+- [ ] No auth required (model pricing is public).
+
+---
+
+### 10.13 — Verification
+
+- [ ] `pnpm typecheck` — zero errors.
+- [ ] `pnpm dev` — no runtime errors in console.
+- [ ] `/signup` → fill form → submit → profile row appears in Supabase dashboard → redirects to `/new`.
+- [ ] `/login` → sign in with created account → redirects to `/new`.
+- [ ] Visit `/dashboard` while logged out → redirects to `/login`.
+- [ ] Visit `/builder/anything` while logged out → redirects to `/login`.
+- [ ] Sidebar shows real user name and credit balance (5 credits from signup bonus).
+- [ ] `GET /api/models` returns the 11 active models from DB.
+- [ ] Sign out → redirects to `/login`, protected routes redirect again.
+- [ ] No `MockAuthContext` or `AuthGuard` imports remain anywhere in the codebase.
+
+---
+
+## ── NEXT ── Phase 11 — AI Streaming (Anthropic + OpenAI + Google)
+
+**Begins after Phase 10 verification passes.**
+
+Key tasks (full detail in PLAN.md Phase 11):
+- Install `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google`
+- Build `lib/ai/system-prompt.ts` (3-layer: security + quality + project context)
+- Build `lib/ai/artifact-parser.ts` (boltArtifact streaming parser)
+- Build `lib/ai/context-manager.ts` (8 messages verbatim + summarize older)
+- Build `lib/credits/calculate.ts` (hold → deduct → refund using model_pricing table)
+- Implement `app/api/chat/route.ts` (multi-provider routing, credit hold, stream, finalize)
+- Wire `useChat()` in `ChatPanel.tsx` to real `/api/chat`
+- Model picker reads from `/api/models`, gated by user's plan
 
 ---
 
 ## ── NOTES FOR CODEX ──
 
-### Order
-**F → G → J → H → I**. Do not start H before J — H imports `toast` from `@/lib/toast` which requires Sonner (J.8).
-
 ### Hard rules
-1. **No backend calls** — All data from `lib/mock/*`. Do not touch real APIs.
-2. **Toast is Sonner** — Import `toast` from `@/lib/toast`. Do NOT create `components/shared/Toast.tsx`.
-3. **Layout CSS is untouched** — `.app-layout`, `.sidebar`, `.builder-chrome`, `.hero`, `.grid-3`, `.grid-4`, `.project-table-row`, `.tool-tab`, `.tool-btn`, `.circle-btn`, `.chip-btn` stay in `globals.css` unchanged.
-4. **Builder toolbar tabs stay custom** — `.tool-tab` buttons in `BuilderMock` do NOT use shadcn `<Tabs>`. Only the settings `TabBar` migrates.
-5. **Phase G is data-driven** — All preview logic driven by `project.type`. No `if (projectId === "healthtech-proto")` conditions.
-6. **Run `npm run typecheck` after each phase** — G changes `BuilderMock` and `PreviewPanel` signatures simultaneously; both must be done before typecheck.
-7. **Prompt chip buttons stay as `.pill` buttons** — They are interactive, not informational. Do not replace with `<Badge>`.
+1. **Never call `supabase.auth.getSession()` server-side** — always use `supabase.auth.getUser()`.
+2. **No frontend credit changes** — credit deduction happens server-side only via API routes.
+3. **No mock data imports in real pages** — `lib/mock/*` is only for UI development, not used in backend routes.
+4. **RLS on every table** — every `create table` must be followed by `alter table ... enable row level security` and at least one policy.
+5. **Service role key is server-only** — never import `SUPABASE_SERVICE_ROLE_KEY` in any file inside `app/(marketing)`, `app/(auth)`, or client components.
+6. **Run `pnpm typecheck` after each numbered task** — do not batch multiple tasks before checking.
+7. **Spinner on all async form actions** — disable button + show loading state while Supabase calls are in flight.

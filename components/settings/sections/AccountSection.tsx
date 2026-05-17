@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
+// TODO Phase 11: replace MOCK_USER with real user/profile props passed from server component
 import { MOCK_USER } from "@/lib/mock/user";
 
 export function AccountSection() {
