@@ -201,7 +201,8 @@ Backend implementation begins only after this UI shell is accepted.
 ```
 PLATFORM FRONTEND   Next.js App Router + Tailwind + shadcn/ui → Cloudflare Pages
 PLATFORM BACKEND    Supabase (auth, projects, credits, messages)
-AI LAYER            Claude Sonnet 4.5 via Vercel AI SDK (streaming)
+AI LAYER            Anthropic (Claude) + OpenAI (GPT-5.x) + Google (Gemini) via Vercel AI SDK
+                    User picks model per prompt — locked during active stream only
 AI TOOLCHAIN        Planner agent + Builder agent + Reviewer agent + Security agent
 EXECUTION           Fly.io Machines — one per USER ACCOUNT
                     auto_stop_machines="suspend", auto_start_machines=true
@@ -242,9 +243,10 @@ CREDITS             estimates, holds, final charge, itemized credit receipts
 ### AI + Agent Runtime
 
 - **AI SDK:** Vercel AI SDK
-- **Primary model:** Claude Sonnet 4.5 via `@ai-sdk/anthropic`
-- **Selectable models:** Claude Sonnet, Claude Opus, GPT-5.5, and future approved coding models
-- **Model policy:** selected before a run, locked during the active run, changeable between runs
+- **Providers at launch:** Anthropic (`@ai-sdk/anthropic`), OpenAI (`@ai-sdk/openai`), Google (`@ai-sdk/google`)
+- **Default model:** Claude Sonnet 4.5 (Anthropic)
+- **Selectable models per prompt:** Claude Haiku 4.5, Sonnet 4.5/4.6, Opus 4.5 · GPT-4.1 Nano, GPT-5.4 Mini/Standard, GPT-5.5 · Gemini 2.5 Flash, Gemini 2.5 Pro
+- **Model policy:** selected per prompt (before each message), locked during active stream, available again after stream completes
 - **Agent roles:** Planner, Builder, Reviewer, Security, Analytics
 - **Streaming:** `streamText()` with UI message streaming
 - **Artifact protocol:** `boltArtifact` / `boltAction`-style file, shell, and start actions
@@ -1592,7 +1594,7 @@ create table public.agent_runs (
   status text default 'queued' check (status in ('queued','planning','building','reviewing','scanning','completed','failed','cancelled')),
   prompt text not null,
   model_provider text not null default 'anthropic'
-    check (model_provider in ('anthropic','openai')),
+    check (model_provider in ('anthropic','openai','google')),
   model_id text not null default 'claude-sonnet-4-5',
   model_label text not null default 'Claude Sonnet 4.5',
   plan jsonb,
@@ -1720,17 +1722,56 @@ create policy "users own their analytics events"
     )
   );
 
--- CREDIT TRANSACTIONS
+-- MODEL PRICING CATALOG (source of truth for credit rates — update without redeployment)
+create table public.model_pricing (
+  model_id               text primary key,   -- matches provider model name exactly
+  display_name           text not null,
+  provider               text not null check (provider in ('anthropic','openai','google')),
+  credits_per_1m_input   numeric(8,4) not null,  -- credits charged per 1M input tokens
+  credits_per_1m_output  numeric(8,4) not null,  -- credits charged per 1M output tokens
+  min_plan               text not null check (min_plan in ('free','starter','pro','teams')),
+  is_active              boolean default true
+);
+-- No RLS needed — model pricing is public read, admin write only
+
+-- Seed data (1 credit = $0.17 USD, ~60-85% gross margin per model)
+insert into public.model_pricing values
+  ('claude-haiku-4-5',    'Claude Haiku 4.5',     'anthropic', 5.88,  29.41, 'free',    true),
+  ('claude-sonnet-4-5',   'Claude Sonnet 4.5',    'anthropic', 17.65, 88.24, 'free',    true),
+  ('claude-sonnet-4-6',   'Claude Sonnet 4.6',    'anthropic', 17.65, 88.24, 'free',    true),
+  ('claude-opus-4-5',     'Claude Opus 4.5',      'anthropic', 29.41, 147.06,'starter', true),
+  ('claude-opus-4-6',     'Claude Opus 4.6',      'anthropic', 29.41, 147.06,'starter', true),
+  ('gpt-4-1-nano',        'GPT-4.1 Nano',         'openai',    0.59,  2.35,  'free',    true),
+  ('gpt-5-4-mini',        'GPT-5.4 Mini',         'openai',    4.41,  26.47, 'starter', true),
+  ('gpt-5-4-standard',    'GPT-5.4 Standard',     'openai',    14.71, 88.24, 'pro',     true),
+  ('gpt-5-5',             'GPT-5.5',              'openai',    29.41, 176.47,'teams',   true),
+  ('o3',                  'o3',                   'openai',    11.76, 47.06, 'pro',     true),
+  ('gemini-2-5-flash',    'Gemini 2.5 Flash',     'google',    1.76,  14.71, 'free',    true),
+  ('gemini-2-5-pro',      'Gemini 2.5 Pro',       'google',    7.35,  58.82, 'starter', true);
+
+-- CREDIT TRANSACTIONS (immutable append-only ledger)
 create table public.credit_transactions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
   project_id uuid references public.projects(id),
   agent_run_id uuid references public.agent_runs(id),
-  amount integer not null,       -- negative = deducted, positive = added
-  reason text not null,          -- 'initial_build' | 'follow_up' | 'review' | 'security_scan' | 'analytics' | 'deploy' | 'topup' | 'monthly_reset' | 'refund'
+  run_id uuid,                   -- groups hold + deduct + refund for one stream
+  type text not null check (type in ('purchase','hold','deduct','refund','bonus','expire','monthly_reset')),
+  amount numeric(10,4) not null, -- negative = deducted, positive = added
+  model_id text,                 -- which model was used (null for purchase/bonus)
+  tokens_input int,              -- actual tokens (populated on deduct)
+  tokens_output int,
+  price_paid_usd numeric(8,2),   -- only on purchase rows
+  stripe_session_id text,        -- only on purchase rows
   metadata jsonb default '{}'::jsonb,
   created_at timestamptz default now()
 );
+
+-- Live balance view
+create view public.user_credit_balance as
+  select user_id, sum(amount) as balance
+  from public.credit_transactions
+  group by user_id;
 
 alter table public.credit_transactions enable row level security;
 create policy "users own their transactions"
@@ -1874,14 +1915,18 @@ CODE QUALITY:
 
 ### Model Selection Policy
 
-- Model selection happens before the project brief/PRD/build run starts.
-- The selected model is stored on `agent_runs` as `model_provider`, `model_id`, and `model_label`.
-- The selected model affects PRD language, builder behavior, credit estimate, context strategy, and final receipt.
-- The model is locked while `agent_runs.status` is `queued`, `planning`, `building`, `reviewing`, or `scanning`.
-- Users may switch models only between runs, when the previous run is `completed`, `failed`, `cancelled`, or idle.
-- Follow-up prompts create a new agent run and can use a different model.
-- The project should show a warning before switching models between runs: "Changing model may affect output style, reasoning, and credit cost."
-- Run history must show which model was used so generated output is auditable and reproducible.
+- **Per prompt:** The model picker is shown before every message in the chat input, like Emergent.sh.
+- The picker shows all models available on the user's plan (gated by `model_pricing.min_plan`).
+- Estimated credit cost for the selected model is shown below the input before sending.
+- On send: selected model is stored on `agent_runs` as `model_provider`, `model_id`, and `model_label`.
+- **Locked during stream:** picker is disabled while `agent_runs.status` is `building` or `reviewing`. Re-enabled when status returns to idle.
+- Different messages in the same project can use different models — this is by design.
+- Run history shows which model was used per run so output is auditable.
+- Switching to a more expensive model mid-project shows: "This model costs more per run — est. X credits."
+- **Provider routing:** resolved server-side from `model_pricing.provider`. Client only sends `model_id`.
+  - `anthropic` → `@ai-sdk/anthropic`
+  - `openai` → `@ai-sdk/openai`
+  - `google` → `@ai-sdk/google`
 
 ### Review Agent Rules
 
@@ -2196,15 +2241,32 @@ Auth → webhook → POST /api/webhooks/user-created
 Credits should feel fair, legible, and useful to technical users. Charge for work that consumes meaningful AI/runtime resources, but always show the estimate first and the receipt afterward.
 
 ```
-Planner pass                  2-8 credits
-Initial app build             50-150 credits
-Follow-up feature             10-60 credits
-Code review                   5-25 credits
-Security scan                 10-40 credits
-Analytics instrumentation     10-30 credits
-Deployment assist             5-20 credits
-Failed run                    charge only completed steps, refund unused hold
+1 credit = $0.17 USD
+Target gross margin: 60–85% depending on model
+
+Plans:
+  Free:    $0/month   — 5 credits
+  Starter: $16/month  — 100 credits  ($0.16/cr effective)
+  Pro:     $20/month  — 175 credits  ($0.114/cr effective)
+  Teams:   $60/month  — 500 credits  ($0.12/cr effective)
+
+Top-up packs:
+  100 cr  → $17  ($0.170/cr)
+  250 cr  → $40  ($0.160/cr)
+  500 cr  → $80  ($0.160/cr)
+  1000 cr → $150 ($0.150/cr)
+
+Typical credit costs per operation (Sonnet 4.5 default):
+  Planner pass                  0.3–1 credit
+  Initial app build             8–25 credits
+  Follow-up feature             2–10 credits
+  Code review                   1–4 credits
+  Security scan                 2–7 credits
+  Deployment assist             1–3 credits
+  Failed run: charge only completed steps, refund unused hold
 ```
+
+See PRICING.md for full model-by-model cost breakdown and margin calculations.
 
 ### Credit service: `lib/credits/index.ts`
 ```typescript
@@ -2341,14 +2403,14 @@ Week 3:   Phase 8  (Builder chat + preview UI — mock data)        ✅ Done
 Week 4:   Phase 8.5 (Programmer Command Center — review/security) ✅ Done
 Week 4:   Phase 9  (User settings + credits/billing UI)           ✅ Done
 Week 4:   Audit fixes: auth flow, DRY, responsive, mock data      ✅ Done
-Week 5:   Phase F  (Code review bug fixes)                        ← current branch
-Week 5:   Phase G  (Project type awareness in builder)            ← current branch
-Week 5:   Phase J  (shadcn/ui migration — interactive components) ← current branch
-Week 5:   Phase H  (Button interactivity + Sonner toasts)         ← current branch
-Week 5:   Phase I  (End-to-end verification gate)                 ← current branch
+Week 5:   Phase F  (Code review bug fixes)                        ✅ Done
+Week 5:   Phase G  (Project type awareness in builder)            ✅ Done
+Week 5:   Phase J  (shadcn/ui migration — interactive components) ✅ Done
+Week 5:   Phase H  (Button interactivity + Sonner toasts)         ✅ Done
+Week 5:   Phase I  (End-to-end verification gate)                 ✅ Done
           ── UI/UX GATE PASSED — backend work begins ──
-Week 6:   Phase 10 (Platform Supabase schema + real auth)
-Week 7:   Phase 11 (AI / Claude streaming integration)
+Week 6:   Phase 10 (Platform Supabase schema + real auth)         ← current
+Week 7:   Phase 11 (AI streaming — Anthropic + OpenAI + Google)
 Week 8:   Review/security agent pipeline + credit receipts
 Week 9:   Phase 12 (Fly.io machine integration)
 Week 10:  Phase 13 (Supabase auto-provisioning)

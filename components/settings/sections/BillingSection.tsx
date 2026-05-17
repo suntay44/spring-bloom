@@ -2,6 +2,7 @@ import { MOCK_CREDIT_USAGE } from "@/lib/mock/analytics";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "@/lib/toast";
+// TODO Phase 14: replace MOCK_USER with real credit balance + plan from Supabase
 import { MOCK_USER } from "@/lib/mock/user";
 
 const CREDIT_PACKS = ["400 credits — $10", "1,000 credits — $22", "3,000 credits — $60"] as const;

@@ -1,25 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Play } from "lucide-react";
-import { AuthModal } from "@/components/auth/AuthModal";
 import { Button } from "@/components/ui/button";
-import { useMockAuth } from "@/context/MockAuthContext";
 
 export function HeroCTAButtons() {
-  const { isAuthenticated } = useMockAuth();
-  const [authOpen, setAuthOpen] = useState(false);
   const router = useRouter();
 
   function handleStartBuilding() {
-    if (isAuthenticated) {
-      router.push("/new");
-      return;
-    }
-
-    setAuthOpen(true);
+    router.push("/new");
   }
 
   return (
@@ -32,7 +22,6 @@ export function HeroCTAButtons() {
           <Play size={17} /> Watch flow
         </Button>
       </div>
-      {authOpen ? <AuthModal onClose={() => setAuthOpen(false)} defaultTab="signup" /> : null}
     </>
   );
 }

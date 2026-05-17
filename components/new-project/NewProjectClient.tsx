@@ -8,6 +8,7 @@ import { InteractivePromptCard } from "@/components/shared/InteractivePromptCard
 import { toast } from "@/lib/toast";
 import { appTypes, models, type AIModel, type AppType } from "@/lib/mock/data";
 import { MOCK_PROJECTS } from "@/lib/mock/projects";
+// TODO Phase 11: replace MOCK_USER workspace with real user data passed as prop
 import { MOCK_USER } from "@/lib/mock/user";
 
 const PROMPT_CHIPS = ["Wingman", "My Counter Part", "Bill Generator", "Word of the Day"] as const;

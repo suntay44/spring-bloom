@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { Toaster } from "sonner";
-import { MockAuthProvider } from "@/context/MockAuthContext";
 import "./globals.css";
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
@@ -15,7 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" suppressHydrationWarning className={`${geist.variable} font-sans`}>
       <body>
-        <MockAuthProvider>{children}</MockAuthProvider>
+        {children}
         <Toaster position="bottom-right" richColors />
       </body>
     </html>
