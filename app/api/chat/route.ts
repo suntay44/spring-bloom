@@ -4,8 +4,9 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveModel } from '@/lib/ai/providers'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
 import { buildContextMessages } from '@/lib/ai/context-manager'
-import { getBalance, holdCredits, finalizeCredits } from '@/lib/credits/calculate'
+import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
 import { estimateCredits } from '@/lib/ai/credit-estimator'
+import { chatRateLimit } from '@/lib/rate-limit'
 
 export const maxDuration = 60
 
@@ -20,6 +21,13 @@ export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Per-user rate limit — runs before any credit hold / LLM call so a user
+  // can't hammer the expensive streaming endpoint.
+  const { success } = await chatRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: 'Rate limit exceeded. Please slow down.' }, { status: 429 })
+  }
 
   const body = await req.json() as {
     messages: UIMessage[]
@@ -185,12 +193,34 @@ export async function POST(req: Request) {
       } catch (err) {
         // Log server-side only — never expose internal errors to the client
         console.error('[chat/onFinish] Failed to finalize run:', err)
-        // Mark agent run as failed so credits aren't silently held
+        // finalizeCredits inserts refund+deduct atomically; if it threw, the
+        // original hold is still stranded. Cancel it so the user isn't charged
+        // for a run that never completed accounting.
+        try {
+          await cancelHold(user.id, estimate.estimate, agentRun.id, projectId)
+        } catch (refundErr) {
+          console.error('[chat/onFinish] Hold cancellation also failed:', refundErr)
+        }
         await supabase.from('agent_runs')
           .update({ status: 'failed', finished_at: new Date().toISOString() })
           .eq('id', agentRun.id)
           .then(null, () => null) // best-effort
       }
+    },
+    onError: async (event) => {
+      // Stream errored/aborted before onFinish — onFinish will NOT fire, so the
+      // hold placed before streaming is orphaned. Cancel it and mark the run
+      // failed. (finalizeCredits never ran here, so no double-refund risk.)
+      console.error('[chat/onError] Stream failed:', event.error)
+      try {
+        await cancelHold(user.id, estimate.estimate, agentRun.id, projectId)
+      } catch (refundErr) {
+        console.error('[chat/onError] Hold cancellation failed:', refundErr)
+      }
+      await supabase.from('agent_runs')
+        .update({ status: 'failed', finished_at: new Date().toISOString() })
+        .eq('id', agentRun.id)
+        .then(null, () => null) // best-effort
     },
   })
 

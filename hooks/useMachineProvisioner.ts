@@ -2,14 +2,19 @@
 import { useEffect, useState } from 'react'
 
 export function useMachineProvisioner(projectId: string, initialMachineId: string | null) {
+  // Seed initial state from initialMachineId so the UI shows "starting" rather
+  // than "provisioning from scratch" — but we still always hit the API below to
+  // ensure the machine is actually running (it may be stopped on reopen).
   const [machineId, setMachineId] = useState<string | null>(initialMachineId)
-  const [provisioning, setProvisioning] = useState(!initialMachineId)
+  const [provisioning, setProvisioning] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (initialMachineId) return // already have a machine
     let cancelled = false
+    setProvisioning(true)
 
+    // Always call the API — the route is idempotent: it starts an existing
+    // machine, creates one if missing, and handles deleted machines.
     async function provision() {
       try {
         const res = await fetch('/api/fly/machine', {
@@ -33,7 +38,7 @@ export function useMachineProvisioner(projectId: string, initialMachineId: strin
 
     void provision()
     return () => { cancelled = true }
-  }, [projectId, initialMachineId])
+  }, [projectId])
 
   return { machineId, provisioning, error }
 }

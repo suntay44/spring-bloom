@@ -62,6 +62,7 @@ function txColor(tx: CreditTransaction) {
 export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, transactions }: BillingSectionProps) {
   const searchParams = useSearchParams();
   const [checkoutCredits, setCheckoutCredits] = useState<number | null>(null);
+  const [subscribePlan, setSubscribePlan] = useState<string | null>(null);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const usedPercent = maxCredits > 0 ? Math.min(100, (spent / maxCredits) * 100) : 0;
   const balancePercent = maxCredits > 0 ? Math.min(100, (credits / maxCredits) * 100) : 0;
@@ -80,7 +81,7 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
       const res = await fetch("/api/credits/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credits: packCredits }),
+        body: JSON.stringify({ type: "pack", credits: packCredits }),
       });
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok || !data.url) throw new Error(data.error ?? "Unable to start checkout");
@@ -88,6 +89,23 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to start checkout");
       setCheckoutCredits(null);
+    }
+  }
+
+  async function handleSubscribe(plan: string) {
+    setSubscribePlan(plan);
+    try {
+      const res = await fetch("/api/credits/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "subscription", plan }),
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Unable to start checkout");
+      window.location.href = data.url;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to start checkout");
+      setSubscribePlan(null);
     }
   }
 
@@ -236,8 +254,8 @@ export function BillingSection({ credits, maxCredits, spent, bonusEarned, plan, 
           </div>
           <div className="flex gap-3">
             {plan === "free" ? (
-              <Button disabled={checkoutCredits !== null} onClick={() => void handleCheckout(250)} type="button">
-                <ArrowUpRight size={16} /> {checkoutCredits === 250 ? "Opening..." : "Upgrade to Pro"}
+              <Button disabled={subscribePlan !== null} onClick={() => void handleSubscribe("pro")} type="button">
+                <ArrowUpRight size={16} /> {subscribePlan === "pro" ? "Opening..." : "Upgrade to Pro"}
               </Button>
             ) : (
               <Button disabled={isPortalLoading} onClick={() => void handleBillingPortal()} type="button" variant="outline">

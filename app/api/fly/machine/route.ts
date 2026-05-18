@@ -2,6 +2,32 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { createMachine, startMachine, getMachine, execOnMachine } from '@/lib/fly/client'
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
+
+// Inject the user's Supabase env vars into the machine's /app/.env.local.
+// Swallows failures loosely so a bad injection doesn't break machine lifecycle.
+async function injectSupabaseEnv(
+  machineId: string,
+  supabase: SupabaseServerClient,
+  userId: string
+) {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('supabase_project_url, supabase_anon_key')
+    .eq('id', userId)
+    .single()
+
+  if (profile?.supabase_project_url && profile?.supabase_anon_key) {
+    await execOnMachine(machineId, [
+      'sh', '-c',
+      'printf "NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\n" "$1" "$2" >> /app/.env.local',
+      '--',
+      profile.supabase_project_url,
+      profile.supabase_anon_key,
+    ])
+  }
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,21 +51,7 @@ export async function POST(req: Request) {
       await startMachine(project.fly_machine_id)
       const machine = await getMachine(project.fly_machine_id)
       // Inject user's Supabase env vars into machine
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('supabase_project_url, supabase_anon_key')
-        .eq('id', user.id)
-        .single()
-
-      if (profile?.supabase_project_url && profile?.supabase_anon_key) {
-        await execOnMachine(machine.id, [
-          'sh', '-c',
-          'printf "NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\n" "$1" "$2" >> /app/.env.local',
-          '--',
-          profile.supabase_project_url,
-          profile.supabase_anon_key,
-        ])
-      }
+      await injectSupabaseEnv(machine.id, supabase, user.id)
       await supabase.from('projects').update({ fly_machine_status: machine.state }).eq('id', projectId)
       return NextResponse.json({ data: machine })
     } catch {
@@ -52,6 +64,17 @@ export async function POST(req: Request) {
   await supabase.from('projects')
     .update({ fly_machine_id: machine.id, fly_machine_status: machine.state })
     .eq('id', projectId)
+
+  // Inject user's Supabase env vars into the freshly created machine.
+  // Ensure it's started (mirror the existing-machine branch's readiness
+  // approach) before exec. Swallow failures so creation still succeeds.
+  try {
+    await startMachine(machine.id)
+    await getMachine(machine.id)
+    await injectSupabaseEnv(machine.id, supabase, user.id)
+  } catch {
+    // Injection is best-effort — don't fail machine creation
+  }
 
   return NextResponse.json({ data: machine }, { status: 201 })
 }

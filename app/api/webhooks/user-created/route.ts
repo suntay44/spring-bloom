@@ -65,6 +65,12 @@ export async function POST(req: Request) {
       const serviceKey = keys.find((k) => k.name === 'service_role')?.api_key ?? ''
       await runMigration(project.ref, BASE_SCHEMA_SQL)
 
+      // Service-role key is stored in the locked-down user_secrets table
+      // (RLS denies all non-service-role access), never in profiles.
+      await (platformClient as unknown as PlatformClient)
+        .from('user_secrets')
+        .upsert({ user_id: userId, supabase_service_key: serviceKey })
+
       await (platformClient as unknown as PlatformClient)
         .from('profiles')
         .update({
@@ -72,7 +78,6 @@ export async function POST(req: Request) {
           // api_url is not always returned by the Management API — derive from ref
           supabase_project_url: project.api_url ?? `https://${project.ref}.supabase.co`,
           supabase_anon_key: anonKey,
-          supabase_service_key: serviceKey,
           supabase_status: 'ready',
         })
         .eq('id', userId)

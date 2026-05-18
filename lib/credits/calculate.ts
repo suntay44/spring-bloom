@@ -45,6 +45,9 @@ export async function getBalance(userId: string): Promise<number> {
 }
 
 // Places a credit hold before a run starts. Returns the hold transaction id.
+// Uses the place_credit_hold RPC so the balance check + hold insert happen
+// atomically inside a single Postgres transaction (with an advisory lock per
+// user), preventing concurrent requests from overdrawing the account.
 export async function holdCredits(
   userId: string,
   estimatedCredits: number,
@@ -53,24 +56,26 @@ export async function holdCredits(
 ): Promise<string> {
   const supabase = getServiceClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from('credit_transactions')
-    .insert({
-      user_id: userId,
-      agent_run_id: agentRunId,
-      project_id: projectId,
-      type: 'hold',
-      amount: -estimatedCredits, // negative = reservation
-    })
-    .select('id')
-    .single() as { data: { id: string } | null; error: { message: string } | null }
-  if (error) throw new Error(`Credit hold failed: ${error.message}`)
-  return (data as { id: string }).id
+  const { data, error } = await (supabase as any).rpc('place_credit_hold', {
+    p_user_id: userId,
+    p_amount: estimatedCredits,
+    p_agent_run_id: agentRunId,
+    p_project_id: projectId,
+  }) as { data: string | null; error: { message: string } | null }
+  if (error) {
+    if (error.message.includes('INSUFFICIENT_CREDITS')) {
+      throw new Error('INSUFFICIENT_CREDITS')
+    }
+    throw new Error(`Credit hold failed: ${error.message}`)
+  }
+  return data as string
 }
 
 // Calculates actual credits used from real token counts, then:
-// 1. Inserts a deduct transaction for actual usage
-// 2. Inserts a refund transaction for unused hold
+// 1. Inserts a refund transaction that cancels the ENTIRE original hold
+//    (+estimatedCredits), and
+// 2. Inserts a deduct transaction for the actual usage (-actualCredits).
+// Net balance impact = -estimated (hold) + estimated (refund) - actual = -actual.
 export async function finalizeCredits(
   userId: string,
   agentRunId: string,
@@ -83,11 +88,24 @@ export async function finalizeCredits(
     (usage.tokensInput / 1_000_000) * usage.creditsPerMInput +
     (usage.tokensOutput / 1_000_000) * usage.creditsPerMOutput
 
-  const refundAmount = Math.max(0, estimatedCredits - actualCredits)
+  // The refund cancels the FULL original hold (-estimatedCredits), and the
+  // deduct charges the actual usage. The refund is unconditional — it must
+  // always be inserted to reverse the hold, regardless of actual usage.
+  const holdCancellationAmount = estimatedCredits
   const supabase = getServiceClient()
 
-  // Insert deduct + optional refund in one batch
+  // Insert refund (full hold cancellation) + deduct (actual usage) in one batch
   const rows: CreditTransactionInsert[] = [
+    {
+      user_id: userId,
+      agent_run_id: agentRunId,
+      project_id: projectId,
+      type: 'refund',
+      amount: holdCancellationAmount,
+      model_id: modelId,
+      tokens_input: 0,
+      tokens_output: 0,
+    },
     {
       user_id: userId,
       agent_run_id: agentRunId,
@@ -100,19 +118,6 @@ export async function finalizeCredits(
     },
   ]
 
-  if (refundAmount > 0.001) {
-    rows.push({
-      user_id: userId,
-      agent_run_id: agentRunId,
-      project_id: projectId,
-      type: 'refund',
-      amount: refundAmount,
-      model_id: modelId,
-      tokens_input: 0,
-      tokens_output: 0,
-    })
-  }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
     .from('credit_transactions')
@@ -120,4 +125,35 @@ export async function finalizeCredits(
   if (error) throw new Error(`Credit finalize failed: ${error.message}`)
 
   return actualCredits
+}
+
+// Cancels an orphaned hold when a run never reaches finalizeCredits (stream
+// error/abort, or finalize itself threw before inserting anything). Inserts a
+// single refund of +estimatedCredits to fully reverse the original hold.
+//
+// Safe against double-refund: finalizeCredits inserts its refund+deduct as ONE
+// atomic .insert([...]) — if it threw, neither row landed, so this standalone
+// cancellation is the only reversal. Must use the service client because after
+// migration 011 RLS denies all authenticated-role writes to credit_transactions.
+export async function cancelHold(
+  userId: string,
+  estimatedCredits: number,
+  agentRunId: string,
+  projectId: string
+): Promise<void> {
+  const supabase = getServiceClient()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('credit_transactions')
+    .insert({
+      user_id: userId,
+      agent_run_id: agentRunId,
+      project_id: projectId,
+      type: 'refund',
+      amount: estimatedCredits,
+      model_id: null,
+      tokens_input: 0,
+      tokens_output: 0,
+    }) as { error: { message: string } | null }
+  if (error) throw new Error(`Credit hold cancellation failed: ${error.message}`)
 }
