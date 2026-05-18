@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { UIMessage } from "ai";
 import { BuilderMock } from "@/components/builder/BuilderMock";
 import { createClient } from "@/lib/supabase/server";
@@ -11,7 +11,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) notFound();
+  if (!user) redirect('/login');
 
   const [
     { data: project },

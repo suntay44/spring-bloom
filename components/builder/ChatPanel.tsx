@@ -77,7 +77,14 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   }, []);
 
   useEffect(() => {
-    if (error) toast.error("Generation failed. Please try again.");
+    if (!error) return;
+    if (error.message.includes("401") || error.message.toLowerCase().includes("unauthorized")) {
+      toast.error("Session expired — please log in again.", {
+        action: { label: "Log in", onClick: () => { window.location.href = "/login"; } },
+      });
+    } else {
+      toast.error("Generation failed. Please try again.");
+    }
   }, [error]);
 
   useEffect(() => {
@@ -127,7 +134,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
           {models.length > 0 ? models.map((model) => <option key={model.model_id} value={model.model_id}>{model.display_name}</option>) : <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>}
         </select>
         <p className="text-xs text-slate-500">est. ~{creditEstimate.estimate} credits</p>
-        <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder="Ask Wild Cupcake..." value={inputValue} />
+        <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder="Ask SpringBloom..." value={inputValue} />
         <div className="composer-actions">
           <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => toast("File upload — coming soon")} type="button">+</button><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
           <div className="relative flex items-center gap-2">

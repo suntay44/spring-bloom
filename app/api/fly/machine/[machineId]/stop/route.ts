@@ -17,6 +17,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ machin
     .single()
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  await stopMachine(machineId)
-  return NextResponse.json({ ok: true })
+  try {
+    await stopMachine(machineId)
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('[fly/stop] Failed:', err)
+    return NextResponse.json({ error: 'Failed to stop machine' }, { status: 503 })
+  }
 }

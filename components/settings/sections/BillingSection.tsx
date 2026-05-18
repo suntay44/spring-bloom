@@ -26,8 +26,9 @@ const CREDIT_PACKS: Array<{ label: string; credits: number; price: string; perCr
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",
+  starter: "Starter",
   pro: "Pro",
-  agency: "Agency",
+  teams: "Teams",
 };
 
 function formatDate(iso: string) {
@@ -35,7 +36,6 @@ function formatDate(iso: string) {
 }
 
 function txLabel(tx: CreditTransaction): string {
-  if (tx.type === "grant") return "Credit grant";
   if (tx.type === "bonus") {
     const reason = (tx.metadata as { reason?: string } | null)?.reason;
     if (reason === "signup_bonus") return "Signup bonus";

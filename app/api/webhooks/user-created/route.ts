@@ -21,7 +21,7 @@ export async function POST(req: Request) {
   if (body.type !== 'INSERT') return NextResponse.json({ ok: true })
 
   const userId = body.record.id
-  const projectName = `wc-${userId.slice(0, 8)}`
+  const projectName = `sb-${userId.slice(0, 8)}`
   const dbPass = crypto.randomUUID().replace(/-/g, '')
 
   // Mark as provisioning immediately so UI can poll

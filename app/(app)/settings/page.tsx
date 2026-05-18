@@ -3,6 +3,8 @@ import { SettingsMock } from "@/components/settings/SettingsMock";
 import { createClient } from "@/lib/supabase/server";
 import { planLimit } from "@/lib/credits/limits";
 
+export const metadata = { title: "Settings — SpringBloom" };
+
 export default async function SettingsPage() {
   const supabase = await createClient();
 

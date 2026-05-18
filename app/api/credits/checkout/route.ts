@@ -21,38 +21,44 @@ export async function POST(req: Request) {
     .single() as { data: { stripe_customer_id: string | null; full_name: string | null } | null; error: unknown }
 
   let customerId = profile?.stripe_customer_id
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      name: profile?.full_name ?? undefined,
-      metadata: { user_id: user.id },
-    })
-    customerId = customer.id
-    await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
-  }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL!
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: 'payment',
-    line_items: [{
-      quantity: 1,
-      price_data: {
-        currency: 'usd',
-        unit_amount: pack.priceUsd * 100, // cents
-        product_data: {
-          name: `Wild Cupcake — ${pack.label}`,
-          description: `${pack.credits} credits · $${(pack.priceUsd / pack.credits).toFixed(3)}/credit · no expiry`,
+  try {
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: profile?.full_name ?? undefined,
+        metadata: { user_id: user.id },
+      })
+      customerId = customer.id
+      await supabase.from('profiles').update({ stripe_customer_id: customerId }).eq('id', user.id)
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL!
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'payment',
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: pack.priceUsd * 100, // cents
+          product_data: {
+            name: `SpringBloom — ${pack.label}`,
+            description: `${pack.credits} credits · $${(pack.priceUsd / pack.credits).toFixed(3)}/credit · no expiry`,
+          },
         },
+      }],
+      metadata: {
+        user_id: user.id,
+        credits: String(pack.credits),
       },
-    }],
-    metadata: {
-      user_id: user.id,
-      credits: String(pack.credits),
-    },
-    success_url: `${appUrl}/settings?credits=success`,
-    cancel_url: `${appUrl}/settings?credits=cancelled`,
-  })
+      success_url: `${appUrl}/settings?credits=success`,
+      cancel_url: `${appUrl}/settings?credits=cancelled`,
+    })
 
-  return NextResponse.json({ url: session.url })
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    console.error('[credits/checkout] Stripe error:', err)
+    return NextResponse.json({ error: 'Unable to start checkout. Please try again.' }, { status: 503 })
+  }
 }

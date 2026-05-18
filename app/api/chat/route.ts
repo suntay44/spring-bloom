@@ -1,11 +1,21 @@
 import { streamText, type UIMessage } from 'ai'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { resolveModel } from '@/lib/ai/providers'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
 import { buildContextMessages } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits } from '@/lib/credits/calculate'
 import { estimateCredits } from '@/lib/ai/credit-estimator'
+import { chatRateLimit } from '@/lib/rate-limit'
+
+function getSupabaseAdmin() {
+  return createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+}
 
 export const maxDuration = 60
 
@@ -20,6 +30,14 @@ export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { success, limit, remaining } = await chatRateLimit.limit(user.id);
+  if (!success) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment." },
+      { status: 429, headers: { "X-RateLimit-Limit": String(limit), "X-RateLimit-Remaining": String(remaining) } }
+    );
+  }
 
   const body = await req.json() as {
     messages: UIMessage[]
@@ -141,58 +159,93 @@ export async function POST(req: Request) {
     backendMode: project.backend_mode,
   })
 
-  const result = streamText({
-    model,
-    system: systemPrompt,
-    messages: contextMessages,
-    onFinish: async ({ totalUsage, text }) => {
-      // Wrap in try/catch — if finalization fails the stream has already completed
-      // successfully for the user; we log the error but don't crash.
-      try {
-        const tokensInput = totalUsage.inputTokens ?? 0
-        const tokensOutput = totalUsage.outputTokens ?? 0
+  const holdAmount = estimate.estimate
+  const supabaseAdmin = getSupabaseAdmin()
 
-        const actualCredits = await finalizeCredits(
-          user.id,
-          agentRun.id,
-          projectId,
-          modelId,
-          {
-            tokensInput,
-            tokensOutput,
-            creditsPerMInput: modelPricing.credits_per_1m_input,
-            creditsPerMOutput: modelPricing.credits_per_1m_output,
-          },
-          estimate.estimate
-        )
+  let result: ReturnType<typeof streamText>
+  try {
+    result = streamText({
+      model,
+      system: systemPrompt,
+      messages: contextMessages,
+      onFinish: async ({ totalUsage, text, finishReason }) => {
+        // Wrap in try/catch — if finalization fails the stream has already completed
+        // successfully for the user; we log the error but don't crash.
+        try {
+          // If generation was stopped/aborted before completing, refund the hold
+          if (finishReason !== 'stop' && finishReason !== 'length') {
+            await supabaseAdmin
+              .from('credit_transactions')
+              .insert({
+                user_id: user.id,
+                type: 'refund',
+                amount: holdAmount, // the amount that was held (positive)
+                metadata: { reason: 'generation_incomplete', finish_reason: finishReason },
+              })
+            await supabase.from('agent_runs')
+              .update({ status: 'failed', finished_at: new Date().toISOString() })
+              .eq('id', agentRun.id)
+            return // Don't deduct if generation didn't complete
+          }
 
-        await Promise.all([
-          supabase.from('messages').insert({
-            project_id: projectId,
-            role: 'assistant',
-            content: text,
-            model_id: modelId,
-            credits_used: actualCredits,
-          }),
-          supabase.from('agent_runs').update({
-            status: 'completed',
-            final_credits: actualCredits,
-            tokens_input: tokensInput,
-            tokens_output: tokensOutput,
-            finished_at: new Date().toISOString(),
-          }).eq('id', agentRun.id),
-        ])
-      } catch (err) {
-        // Log server-side only — never expose internal errors to the client
-        console.error('[chat/onFinish] Failed to finalize run:', err)
-        // Mark agent run as failed so credits aren't silently held
-        await supabase.from('agent_runs')
-          .update({ status: 'failed', finished_at: new Date().toISOString() })
-          .eq('id', agentRun.id)
-          .then(null, () => null) // best-effort
-      }
-    },
-  })
+          const tokensInput = totalUsage.inputTokens ?? 0
+          const tokensOutput = totalUsage.outputTokens ?? 0
+
+          const actualCredits = await finalizeCredits(
+            user.id,
+            agentRun.id,
+            projectId,
+            modelId,
+            {
+              tokensInput,
+              tokensOutput,
+              creditsPerMInput: modelPricing.credits_per_1m_input,
+              creditsPerMOutput: modelPricing.credits_per_1m_output,
+            },
+            holdAmount
+          )
+
+          await Promise.all([
+            supabase.from('messages').insert({
+              project_id: projectId,
+              role: 'assistant',
+              content: text,
+              model_id: modelId,
+              credits_used: actualCredits,
+            }),
+            supabase.from('agent_runs').update({
+              status: 'completed',
+              final_credits: actualCredits,
+              tokens_input: tokensInput,
+              tokens_output: tokensOutput,
+              finished_at: new Date().toISOString(),
+            }).eq('id', agentRun.id),
+          ])
+        } catch (err) {
+          // Log server-side only — never expose internal errors to the client
+          console.error('[chat/onFinish] Failed to finalize run:', err)
+          // Mark agent run as failed so credits aren't silently held
+          await supabase.from('agent_runs')
+            .update({ status: 'failed', finished_at: new Date().toISOString() })
+            .eq('id', agentRun.id)
+            .then(null, () => null) // best-effort
+        }
+      },
+    })
+  } catch (err) {
+    console.error('[chat] Stream error, refunding hold:', err)
+    // Refund the credit hold so user's balance is restored
+    await supabaseAdmin
+      .from('credit_transactions')
+      .insert({
+        user_id: user.id,
+        type: 'refund',
+        amount: holdAmount,
+        metadata: { reason: 'stream_error' },
+      })
+      .then(({ error }) => { if (error) console.error('[chat] Refund insert failed:', error) }) // Don't let refund failure mask original error
+    return NextResponse.json({ error: 'Generation failed' }, { status: 500 })
+  }
 
   return result.toUIMessageStreamResponse()
 }

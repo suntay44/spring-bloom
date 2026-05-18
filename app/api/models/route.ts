@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 
 export async function GET() {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { data, error } = await supabase
     .from('model_pricing')
     .select('model_id, display_name, provider, min_plan, credits_per_1m_input, credits_per_1m_output')

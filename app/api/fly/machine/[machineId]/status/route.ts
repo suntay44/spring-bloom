@@ -17,6 +17,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ machine
     .single()
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const machine = await getMachine(machineId)
-  return NextResponse.json({ data: { state: machine.state, private_ip: machine.private_ip } })
+  try {
+    const machine = await getMachine(machineId)
+    return NextResponse.json({ data: { state: machine.state, private_ip: machine.private_ip } })
+  } catch (err) {
+    console.error('[fly/status] Failed:', err)
+    return NextResponse.json({ error: 'Failed to get machine status' }, { status: 503 })
+  }
 }

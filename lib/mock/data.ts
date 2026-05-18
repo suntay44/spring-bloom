@@ -47,8 +47,8 @@ export const models: [AIModel, ...AIModel[]] = [
 ];
 
 export const pricingPlans: PricingPlan[] = [
-  { name: "Free", price: "$0", credits: "100 credits", projects: "1 project", cta: "Start free" },
-  { name: "Starter", price: "$12", credits: "500 credits", projects: "2 simultaneous previews", cta: "Choose Starter" },
-  { name: "Pro", price: "$29", credits: "1,500 credits", projects: "4 simultaneous previews", cta: "Choose Pro", featured: true },
-  { name: "Agency", price: "$79", credits: "5,000 credits", projects: "Unlimited previews", cta: "Choose Agency" }
+  { name: "Free",    price: "$0",  credits: "5 credits",   projects: "1 active project",    cta: "Get started" },
+  { name: "Starter", price: "$16", credits: "100 credits", projects: "5 active projects",   cta: "Start building" },
+  { name: "Pro",     price: "$20", credits: "175 credits", projects: "Unlimited projects",  cta: "Go Pro",           featured: true },
+  { name: "Teams",   price: "$60", credits: "500 credits", projects: "Unlimited projects",  cta: "Start free trial" },
 ];

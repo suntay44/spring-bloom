@@ -109,7 +109,7 @@ export function AppShell({ children, user, profile, balance, projects = [] }: Re
       </aside>
       <section className="app-main">
         <header className="topbar">
-          <span className="font-semibold">Wild Cupcake</span>
+          <span className="font-semibold">SpringBloom</span>
           <div className="flex items-center gap-3"><Badge variant="secondary">{plan} plan</Badge><Badge variant="secondary">{balance.toLocaleString()} credits</Badge></div>
         </header>
         {children}

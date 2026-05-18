@@ -42,16 +42,48 @@ export async function POST(req: Request) {
       }
       await supabase.from('projects').update({ fly_machine_status: machine.state }).eq('id', projectId)
       return NextResponse.json({ data: machine })
-    } catch {
-      // Machine might be deleted — fall through to create a new one
+    } catch (err) {
+      // Only create a new machine if the existing one truly doesn't exist (404)
+      // For other errors, surface them instead of silently creating a duplicate
+      const isNotFound = err instanceof Error &&
+        (err.message.includes('404') || err.message.includes('not found') || err.message.includes('Not Found'))
+
+      if (!isNotFound) {
+        console.error('[fly/machine] Machine restart failed (non-404):', err)
+        return NextResponse.json({ error: 'Machine restart failed. Please try again.' }, { status: 503 })
+      }
+
+      console.log('[fly/machine] Machine not found, provisioning new one')
+      // fall through to create new machine
     }
   }
 
   // Provision a new machine
-  const machine = await createMachine(projectId)
-  await supabase.from('projects')
-    .update({ fly_machine_id: machine.id, fly_machine_status: machine.state })
-    .eq('id', projectId)
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('supabase_project_url, supabase_anon_key')
+      .eq('id', user.id)
+      .single()
 
-  return NextResponse.json({ data: machine }, { status: 201 })
+    const machine = await createMachine(projectId)
+    await supabase.from('projects')
+      .update({ fly_machine_id: machine.id, fly_machine_status: machine.state })
+      .eq('id', projectId)
+
+    if (profile?.supabase_project_url && profile?.supabase_anon_key) {
+      await execOnMachine(machine.id, [
+        'sh', '-c',
+        'printf "NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_ANON_KEY=%s\n" "$1" "$2" >> /app/.env.local',
+        '--',
+        profile.supabase_project_url,
+        profile.supabase_anon_key,
+      ])
+    }
+
+    return NextResponse.json({ data: machine }, { status: 201 })
+  } catch (err) {
+    console.error('[fly/machine] Machine creation failed:', err)
+    return NextResponse.json({ error: 'Machine provisioning failed' }, { status: 503 })
+  }
 }

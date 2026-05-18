@@ -18,10 +18,16 @@ export async function POST() {
   }
 
   const stripe = getStripe()
-  const session = await stripe.billingPortal.sessions.create({
-    customer: profile.stripe_customer_id,
-    return_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
-  })
 
-  return NextResponse.json({ url: session.url })
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: profile.stripe_customer_id,
+      return_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
+    })
+
+    return NextResponse.json({ url: session.url })
+  } catch (err) {
+    console.error('[credits/portal] Stripe error:', err)
+    return NextResponse.json({ error: 'Unable to open billing portal. Please try again.' }, { status: 503 })
+  }
 }
