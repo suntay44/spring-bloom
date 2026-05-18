@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Dashboard — SpringBloom" };
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 

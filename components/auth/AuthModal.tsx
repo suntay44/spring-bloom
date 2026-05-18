@@ -62,7 +62,7 @@ export function AuthModal({ onClose, defaultTab = "login", selectedPlan }: AuthM
         <DialogHeader>
           <DialogTitle className="text-2xl font-semibold">{defaultTab === "signup" ? "Create your account" : "Welcome back"}</DialogTitle>
         </DialogHeader>
-        <p className="mt-1 text-sm font-bold text-slate-500">{defaultTab === "signup" ? "Sign up to start building." : "Sign in to continue to Wild Cupcake."}</p>
+        <p className="mt-1 text-sm font-bold text-slate-500">{defaultTab === "signup" ? "Sign up to start building." : "Sign in to continue to SpringBloom."}</p>
         {selectedPlan ? <div className="mb-5 mt-4 flex items-center justify-center"><Badge variant="secondary">Selected: <strong>{selectedPlan} plan</strong></Badge></div> : null}
         <form className="mt-6 space-y-4" onSubmit={(event) => { event.preventDefault(); if (canSubmit) void handleSubmit(); }}>
           <div>

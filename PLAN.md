@@ -1,11 +1,11 @@
-# Wild Cupcake — Programmer-Centric AI App Builder Plan
+# SpringBloom — Programmer-Centric AI App Builder Plan
 _Generated: 2026-05-14 | Stack confirmed through brainstorm session_
 
 ---
 
 ## Product Direction (locked in)
 
-**Wild Cupcake is a no-code AI app builder for people who still care about code.**
+**SpringBloom is a no-code AI app builder for people who still care about code.**
 
 The product can serve non-technical users, but the default audience is builders, developers, technical founders, agencies, and teams that want AI speed without losing engineering control. The app should feel closer to a programmable workspace than a toy website generator: every generated app has real code, review trails, deployable infrastructure, usage analytics, and security checks that cost credits only when they perform meaningful work.
 
@@ -41,7 +41,7 @@ Prompt → clarify → plan → generate → review → preview → measure → 
 
 - Lovable documentation positions the product around full-stack AI development with real code, security, and enterprise governance; it also exposes AI-driven security review as a credit-consuming chat action. Source: https://docs.lovable.dev/features/security
 - Replit documentation positions Agent as an action-taking builder that plans, creates, tests, and deploys apps from natural language, with app testing and deployment loops as central product behaviors. Sources: https://docs.replit.com/core-concepts/agent/ and https://replit.com/products/agent
-- Wild Cupcake should not merely copy those flows. The durable angle is: **an AI app builder that treats review, security, analytics, and credit economics as core engineering surfaces, not add-ons.**
+- SpringBloom should not merely copy those flows. The durable angle is: **an AI app builder that treats review, security, analytics, and credit economics as core engineering surfaces, not add-ons.**
 
 ---
 
@@ -109,7 +109,7 @@ Backend rules:
 
 Users choose the backend path during the 5-question brief:
 
-- **Managed Supabase:** platform provisions or reuses Wild Cupcake-managed Supabase.
+- **Managed Supabase:** platform provisions or reuses SpringBloom-managed Supabase.
 - **Connect own Supabase:** user provides Supabase credentials; platform validates before generated code depends on it.
 - **Decide later:** platform builds frontend/mock-data-first and marks backend decisions as pending before real data work.
 
@@ -318,10 +318,10 @@ This phase sets up the UI/UX-first build. Install backend-related packages if ne
 ### Tasks
 1. Create Next.js project
 ```bash
-pnpm create next-app@latest wild-cupcake \
+pnpm create next-app@latest spring-bloom \
   --typescript --tailwind --app --src-dir=false \
   --import-alias="@/*"
-cd wild-cupcake
+cd spring-bloom
 ```
 
 2. Install shadcn/ui

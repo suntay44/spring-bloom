@@ -1,4 +1,4 @@
-# Wild Cupcake — Local → Production Launch Checklist
+# SpringBloom — Local → Production Launch Checklist
 
 > Work top-to-bottom. Each section must be ✅ complete before moving to the next.
 > Legend: ✅ Done · ⏳ In progress · ☐ Not started
@@ -33,7 +33,7 @@
 - [ ] All variables above copied to production environment
 - [ ] `STRIPE_SECRET_KEY` → swap to **live** key (`sk_live_...`) before launch
 - [ ] `STRIPE_PUBLISHABLE_KEY` → swap to **live** key (`pk_live_...`) before launch
-- [ ] `NEXT_PUBLIC_APP_URL` → set to production domain (e.g. `https://wildcupcake.app`)
+- [ ] `NEXT_PUBLIC_APP_URL` → set to production domain (e.g. `https://springbloom.app`)
 - [ ] `STRIPE_WEBHOOK_SECRET` → re-generate from Stripe dashboard using production webhook URL
 - [ ] Verify no env var is prefixed `NEXT_PUBLIC_` unless it's intentionally public
 
@@ -52,13 +52,13 @@
 
 ### Auth configuration (Supabase Dashboard → Authentication)
 - [ ] Email confirmation enabled
-- [ ] Email templates customized with Wild Cupcake branding (sender name, logo, colors)
+- [ ] Email templates customized with SpringBloom branding (sender name, logo, colors)
 - [ ] Redirect URLs allowlist includes production domain:
-  - `https://wildcupcake.app/**`
-  - `https://wildcupcake.app/auth/callback`
+  - `https://springbloom.app/**`
+  - `https://springbloom.app/auth/callback`
 - [ ] **Supabase Auth webhook registered** (Phase 13 Task 13.5):
   - Event: `auth.users` INSERT
-  - URL: `https://wildcupcake.app/api/webhooks/user-created`
+  - URL: `https://springbloom.app/api/webhooks/user-created`
   - Header: `x-webhook-secret: {WEBHOOK_SECRET value}`
 - [ ] Password requirements configured (min 8 chars)
 - [ ] Rate limiting on auth endpoints enabled
@@ -99,7 +99,7 @@
   - Pro: $20/month — 1,500 credits
   - Teams: $60/month — 5,000 credits
 - [ ] Webhook endpoint registered in Stripe dashboard:
-  - URL: `https://wildcupcake.app/api/webhooks/stripe`
+  - URL: `https://springbloom.app/api/webhooks/stripe`
   - Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
 - [ ] `STRIPE_WEBHOOK_SECRET` updated with the signing secret from the webhook
 - [ ] **Switch to live keys** (`sk_live_...` / `pk_live_...`) only when ready to accept real payments
@@ -156,7 +156,7 @@
 - [ ] `supabase_service_key` is never returned to the client
 - [ ] `/api/webhooks/*` routes validate `x-webhook-secret` before processing
 - [ ] Stripe webhook validates `stripe-signature` header (add in Phase 14)
-- [ ] Security headers verified with: `curl -I https://wildcupcake.app`
+- [ ] Security headers verified with: `curl -I https://springbloom.app`
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` never appears in client bundles: `grep -r "SERVICE_ROLE" .next/`
 
 ---

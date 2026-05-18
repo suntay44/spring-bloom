@@ -1,15 +1,14 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-
 export default function NotFound() {
   return (
-    <main className="page-shell bg-zinc-950">
-      <div className="container flex min-h-screen flex-col items-center justify-center gap-6 text-center">
-        <Badge variant="secondary">404</Badge>
-        <h1 className="text-5xl font-semibold">Page not found.</h1>
-        <p className="section-lede">The page you&apos;re looking for doesn&apos;t exist or was moved.</p>
-        <Button render={<Link href="/" />}>Go home</Button>
+    <main className="grid min-h-screen place-items-center bg-zinc-950 text-white">
+      <div className="text-center">
+        <p className="text-sm font-bold uppercase tracking-widest text-purple-400">404</p>
+        <h1 className="mt-4 text-4xl font-semibold">Page not found</h1>
+        <p className="mt-3 text-slate-400">The page you're looking for doesn't exist or was moved.</p>
+        <Link className="mt-8 inline-block rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-semibold hover:bg-purple-500" href="/">
+          Go home
+        </Link>
       </div>
     </main>
   );

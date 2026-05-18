@@ -3,6 +3,11 @@ import { PricingSection } from "@/components/marketing/PricingSection";
 import { Footer } from "@/components/shared/Footer";
 import { Badge } from "@/components/ui/badge";
 
+export const metadata = {
+  title: "Pricing — SpringBloom",
+  description: "Simple, credit-based pricing. Start free, scale as you build.",
+};
+
 export default function PricingPage() {
   return (
     <main className="page-shell bg-zinc-950">

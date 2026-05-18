@@ -1,4 +1,4 @@
-# Wild Cupcake — Codex Task List
+# SpringBloom — Codex Task List
 
 > **How to use**: Work tasks top-to-bottom within each phase. Mark done by changing `[ ]` to `[x]`.
 > After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
@@ -110,7 +110,7 @@ All tasks complete. Verified with zero TypeScript errors. Security audit passed.
 
 ## ── COMPLETED ── Phase 13 — Supabase Auto-Provisioning
 
-**Goal**: Auto-create a dedicated Supabase project for each Wild Cupcake user on signup.
+**Goal**: Auto-create a dedicated Supabase project for each SpringBloom user on signup.
 When the AI generates a full-stack app with a database, it generates schema + RLS policies into
 the user's own Supabase project (not the platform's). Invisible to the user — happens in the
 background. Generated apps connect to the user's Supabase via env vars injected into the Fly machine.
@@ -531,7 +531,7 @@ Top-up packs (one-time, no expiry):
           currency: 'usd',
           unit_amount: pack.priceUsd * 100, // cents
           product_data: {
-            name: `Wild Cupcake — ${pack.label}`,
+            name: `SpringBloom — ${pack.label}`,
             description: `${pack.credits} credits · $${(pack.priceUsd / pack.credits).toFixed(3)}/credit · no expiry`,
           },
         },
@@ -887,19 +887,19 @@ Wrap the three main async page layouts in error boundaries so a single broken qu
 - [ ] In `app/(marketing)/pricing/page.tsx` add:
   ```typescript
   export const metadata = {
-    title: "Pricing — Wild Cupcake",
+    title: "Pricing — SpringBloom",
     description: "Simple, credit-based pricing. Start free, scale as you build.",
   };
   ```
 - [ ] In `app/(app)/dashboard/page.tsx` add:
   ```typescript
-  export const metadata = { title: "Dashboard — Wild Cupcake" };
+  export const metadata = { title: "Dashboard — SpringBloom" };
   ```
 - [ ] In `app/(app)/settings/page.tsx` add:
   ```typescript
-  export const metadata = { title: "Settings — Wild Cupcake" };
+  export const metadata = { title: "Settings — SpringBloom" };
   ```
-- [ ] Verify root `app/layout.tsx` already has `title: "Wild Cupcake"` and `description` — it does, no change needed.
+- [ ] Verify root `app/layout.tsx` already has `title: "SpringBloom"` and `description` — it does, no change needed.
 - [ ] `pnpm typecheck` — zero errors.
 
 ---

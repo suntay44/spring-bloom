@@ -59,7 +59,7 @@ export default async function RootPage() {
           </div>
           <h1>Build apps in plain English.</h1>
           <p className="hero-copy">
-            Describe what you want. Confirm the project brief. Wild Cupcake generates web and mobile apps with real
+            Describe what you want. Confirm the project brief. SpringBloom generates web and mobile apps with real
             code, review, security, analytics, and credit receipts.
           </p>
           <HeroCTAButtons />
@@ -143,7 +143,7 @@ export default async function RootPage() {
 
       <section className="section">
         <div className="container">
-          <h2>Builders trust Wild Cupcake.</h2>
+          <h2>Builders trust SpringBloom.</h2>
           <div className="mt-8 grid-3">
             {MOCK_TESTIMONIALS.map((testimonial) => (
               <article className="card feature-card" key={testimonial.name}>

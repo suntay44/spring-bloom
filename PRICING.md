@@ -1,4 +1,4 @@
-# Wild Cupcake — Pricing Strategy & Profitability Model
+# SpringBloom — Pricing Strategy & Profitability Model
 
 > Last updated: 2026-05-16
 > **Sources (live-fetched):**
@@ -30,7 +30,7 @@
 ## 1. Credit Unit Definition
 
 ```
-1 credit = $0.17 USD (Wild Cupcake internal rate)
+1 credit = $0.17 USD (SpringBloom internal rate)
 ```
 
 **15% cheaper than Emergent.sh** ($0.20/cr) and **43% cheaper than Lovable** ($0.30/cr).
@@ -53,7 +53,7 @@ Cheapest credit rate in the market at equivalent model quality.
 | Claude Haiku 3.5 | ❌ Retired | $0.80 | $4.00 | Main API only; Bedrock/Vertex still active |
 | Claude Opus 4.1 | ❌ Deprecated | $15.00 | $75.00 | Do not use |
 
-⭐ = Wild Cupcake primary/default model
+⭐ = SpringBloom primary/default model
 
 **Prompt caching discounts (Sonnet 4.5 example):**
 - 5-min cache write: $3.75/1M (1.25×)
@@ -176,7 +176,7 @@ One-time purchases. No expiry. Stack on top of plan credits.
 
 ### Monthly Plans
 
-| | **Wild Cupcake** | Emergent.sh | Lovable |
+| | **SpringBloom** | Emergent.sh | Lovable |
 |---|---|---|---|
 | **Free** | $0 / 5 cr | $0 / 10 cr | $0 / limited |
 | **Entry paid** | **$16 / 100 cr** | $20 / 100 cr (-20%) | $5 / 150 cr (5/day cap) |
@@ -187,23 +187,23 @@ One-time purchases. No expiry. Stack on top of plan credits.
 
 ### Credit Top-Up Comparison
 
-| Credits | **Wild Cupcake** | Emergent.sh | Lovable |
+| Credits | **SpringBloom** | Emergent.sh | Lovable |
 |---|---|---|---|
 | ~100 cr | **$17 ($0.170/cr)** | $20 ($0.20/cr) | $30 ($0.30/cr) |
 | ~250 cr | **$40 ($0.160/cr)** | $50 ($0.20/cr) | $75 ($0.30/cr) |
 | ~500 cr | **$75 ($0.150/cr)** | $100 ($0.20/cr) | $150 ($0.30/cr) |
 | ~1,000 cr | **$140 ($0.140/cr)** | — | $300 ($0.30/cr) |
 
-> Wild Cupcake is **43–53% cheaper than Lovable** and **15–30% cheaper than Emergent** on top-ups.
+> SpringBloom is **43–53% cheaper than Lovable** and **15–30% cheaper than Emergent** on top-ups.
 
 ### Value Per $20 Spent (Sonnet runs, 1 cr each)
 
 | Platform | $20 gets you |
 |---|---|
-| **Wild Cupcake top-up** | **117 Sonnet runs** ($20 / $0.17) |
+| **SpringBloom top-up** | **117 Sonnet runs** ($20 / $0.17) |
 | Emergent.sh top-up | 100 runs ($20 / $0.20) |
 | Lovable top-up | 67 runs ($20 / $0.30) |
-| Wild Cupcake Starter plan | **100 runs for $16** (saving $4 vs Emergent for same credits) |
+| SpringBloom Starter plan | **100 runs for $16** (saving $4 vs Emergent for same credits) |
 
 ---
 
