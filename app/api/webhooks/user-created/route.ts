@@ -10,6 +10,10 @@ const platformClient = createClient(
   { auth: { persistSession: false } }
 )
 
+// Typed helper so we don't need `any` on every call
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PlatformClient = ReturnType<typeof createClient<any>>
+
 export async function POST(req: Request) {
   // Validate webhook secret
   const secret = req.headers.get('x-webhook-secret')
@@ -21,41 +25,65 @@ export async function POST(req: Request) {
   if (body.type !== 'INSERT') return NextResponse.json({ ok: true })
 
   const userId = body.record.id
-  const projectName = `wc-${userId.slice(0, 8)}`
-  const dbPass = crypto.randomUUID().replace(/-/g, '')
+
+  // Idempotency check: if already provisioned, return immediately
+  const { data: profile } = await (platformClient as unknown as PlatformClient)
+    .from('profiles')
+    .select('supabase_project_ref, supabase_status')
+    .eq('id', userId)
+    .single()
+
+  if (profile?.supabase_project_ref) {
+    console.log(`[user-created webhook] User ${userId} already provisioned — skipping`)
+    return NextResponse.json({ status: 'already_provisioned' })
+  }
+
+  // If already in progress (another webhook delivery), skip to avoid double-provisioning
+  if (profile?.supabase_status === 'provisioning') {
+    console.log(`[user-created webhook] User ${userId} provisioning already in progress — skipping`)
+    return NextResponse.json({ status: 'provisioning' })
+  }
 
   // Mark as provisioning immediately so UI can poll
-  await (platformClient as unknown as ReturnType<typeof createClient<any>>)
+  await (platformClient as unknown as PlatformClient)
     .from('profiles')
     .update({ supabase_status: 'provisioning' })
     .eq('id', userId)
 
-  try {
-    const project = await createSupabaseProject({ name: projectName, dbPass })
-    await waitForProject(project.ref)
-    const keys = await getProjectApiKeys(project.ref)
-    const anonKey = keys.find((k) => k.name === 'anon')?.api_key ?? ''
-    const serviceKey = keys.find((k) => k.name === 'service_role')?.api_key ?? ''
-    await runMigration(project.ref, BASE_SCHEMA_SQL)
+  const projectName = `wc-${userId.slice(0, 8)}`
+  const dbPass = crypto.randomUUID().replace(/-/g, '')
 
-    await (platformClient as unknown as ReturnType<typeof createClient<any>>)
-      .from('profiles')
-      .update({
-        supabase_project_ref: project.ref,
-        // api_url is not always returned by the Management API — derive from ref
-        supabase_project_url: project.api_url ?? `https://${project.ref}.supabase.co`,
-        supabase_anon_key: anonKey,
-        supabase_service_key: serviceKey,
-        supabase_status: 'ready',
-      })
-      .eq('id', userId)
-  } catch (err) {
-    console.error('[user-created webhook] Provisioning failed:', err)
-    await (platformClient as unknown as ReturnType<typeof createClient<any>>)
-      .from('profiles')
-      .update({ supabase_status: 'error' })
-      .eq('id', userId)
-  }
+  // Return 200 immediately — Supabase webhook has a short delivery timeout.
+  // Provisioning (waitForProject) can take up to 2 minutes, so run it in the
+  // background after the response is sent to prevent retries / double-provisioning.
+  void (async () => {
+    try {
+      const project = await createSupabaseProject({ name: projectName, dbPass })
+      await waitForProject(project.ref)
+      const keys = await getProjectApiKeys(project.ref)
+      const anonKey = keys.find((k) => k.name === 'anon')?.api_key ?? ''
+      const serviceKey = keys.find((k) => k.name === 'service_role')?.api_key ?? ''
+      await runMigration(project.ref, BASE_SCHEMA_SQL)
 
-  return NextResponse.json({ ok: true })
+      await (platformClient as unknown as PlatformClient)
+        .from('profiles')
+        .update({
+          supabase_project_ref: project.ref,
+          // api_url is not always returned by the Management API — derive from ref
+          supabase_project_url: project.api_url ?? `https://${project.ref}.supabase.co`,
+          supabase_anon_key: anonKey,
+          supabase_service_key: serviceKey,
+          supabase_status: 'ready',
+        })
+        .eq('id', userId)
+    } catch (err) {
+      console.error('[user-created webhook] Provisioning failed:', err)
+      await (platformClient as unknown as PlatformClient)
+        .from('profiles')
+        .update({ supabase_status: 'error' })
+        .eq('id', userId)
+    }
+  })()
+
+  return NextResponse.json({ status: 'provisioning' })
 }

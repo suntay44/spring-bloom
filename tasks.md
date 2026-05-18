@@ -4,8 +4,8 @@
 > After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Status**: Phases 1–15 complete and verified. `pnpm build` passes clean. Zero TypeScript errors.
-> **Current**: Post-Phase 15 hardening complete. Next = Deployment + Post-Launch features.
+> **Status**: Phases 1–17 scaffold complete and verified. `pnpm build` passes clean. Zero TypeScript errors.
+> **Current**: Phase 16 (Subscription Billing) + Phase 17 scaffold done. Next = Deployment.
 
 ---
 
@@ -151,22 +151,15 @@ All frontend UI phases complete. UI/UX gate accepted. Not re-opened.
     UNIQUE (stripe_session_id);
   ```
 
-### D2 — Cloudflare Pages deployment
+### D2 — Vercel deployment (current)
 
-- [ ] Install: `pnpm add -D @cloudflare/next-on-pages`
-- [ ] Create `wrangler.toml`:
-  ```toml
-  name = "springbloom"
-  compatibility_date = "2024-09-23"
-  compatibility_flags = ["nodejs_compat"]
-  pages_build_output_dir = ".vercel/output/static"
-  ```
-- [ ] Add build command to Cloudflare Pages dashboard:
-  - Build command: `pnpm run pages:build`
-  - Output dir: `.vercel/output/static`
-- [ ] Add `package.json` script: `"pages:build": "npx @cloudflare/next-on-pages"`
-- [ ] Add all production env vars to Cloudflare Pages dashboard
-- [ ] Deploy and verify all routes
+> Note: Cloudflare Pages is obsolete/replaced. SpringBloom platform now deploys to Vercel.
+
+- [ ] Install Vercel CLI: `pnpm add -D vercel`
+- [ ] Run `vercel --prod` or connect GitHub repo to Vercel dashboard
+- [ ] Add all env vars from `.env.example` to Vercel project settings
+- [ ] Set build command: `pnpm build`, output dir: `.next`
+- [ ] Enable Edge middleware: automatic with Next.js (no extra config needed)
 
 ### D3 — Post-deploy verification
 
@@ -177,6 +170,48 @@ All frontend UI phases complete. UI/UX gate accepted. Not re-opened.
 - [ ] Settings → buy credits → Stripe Checkout → webhook → balance updates
 - [ ] `curl -I https://your-domain.com | grep -E "X-Frame|Content-Security-Policy|Strict-Transport"`
 - [ ] Lighthouse score > 90 on landing page
+- [ ] Stripe webhooks configured in Stripe dashboard pointing to `https://your-domain.com/api/webhooks/stripe`
+- [ ] Subscription prices created in Stripe and IDs copied to `STRIPE_PRICE_STARTER_ID`, `STRIPE_PRICE_PRO_ID`, `STRIPE_PRICE_TEAMS_ID` env vars
+
+---
+
+## ── PHASE 17 ── Publish & Custom Domains (Cloudflare)
+
+> Scaffold in place. Full implementation pending.
+
+### P17-1 — DB + API scaffold ✅ (done in Wave 2)
+- [x] Migration 008: projects.published_url, published_at, custom_domain, cloudflare_deployment_id, publish_slug
+- [x] lib/cloudflare/client.ts — Pages API + custom hostname wrapper
+- [x] app/api/publish/route.ts — stub (501) with auth + ownership check
+
+### P17-2 — Build + Deploy pipeline
+- [ ] Get files from Fly machine via /api/fly/machine/[id]/files
+- [ ] Run build command in Fly machine (npm run build)
+- [ ] Upload dist/ to Cloudflare Pages via Direct Upload API
+- [ ] Store cloudflare_deployment_id + published_url in projects table
+- [ ] Return { url: 'https://{slug}.springbloom.app' }
+
+### P17-3 — Publish UI
+- [ ] "Publish" button in builder toolbar
+- [ ] Publish progress modal (3 steps: Building → Uploading → Live)
+- [ ] Show published URL with copy button after success
+- [ ] "Unpublish" to clear published_url
+
+### P17-4 — Custom Domains
+- [ ] Custom domain input in project settings
+- [ ] Add via Cloudflare for SaaS API (addCustomHostname)
+- [ ] DNS verification instructions shown to user
+- [ ] CNAME {slug}.springbloom.app as fallback
+
+---
+
+## ── PHASE 16 ── Subscription Billing ✅ (complete)
+
+- [x] `supabase/migrations/007_subscription_columns.sql` — `subscription_id`, `subscription_status`, `plan_period_end` on profiles
+- [x] `lib/stripe/client.ts` — `SUBSCRIPTION_PRICES` map, `PLAN_MONTHLY_CREDITS`, `planFromPriceId()` helper
+- [x] `app/api/credits/checkout/route.ts` — discriminated union: `type:'pack'` (one-time) | `type:'subscription'` (recurring)
+- [x] `app/api/webhooks/stripe/route.ts` — handlers for `customer.subscription.created/updated/deleted` + `invoice.paid` (idempotent credit grants)
+- [x] `profiles.plan` is now set by subscription webhooks (was never written before)
 
 ---
 
@@ -188,11 +223,7 @@ These are identified improvements for after initial deployment:
 |----------|---------|-----|
 | High | OpenGraph images | Social sharing previews for landing + pricing |
 | High | Loading skeletons in dashboard + builder | Better perceived performance |
-| High | Supabase webhook timeout fix | `waitForProject` blocks HTTP response — needs background job |
-| Medium | Monthly reset idempotency | `pg_cron` can double-fire; needs `WHERE NOT EXISTS` guard |
 | Medium | `estimate.estimate` credit guard (not `estimate.min`) | Prevents negative balances |
-| Medium | Connection-lost inline error card in ChatPanel | Currently only auto-dismissing toast |
-| Medium | Partial stream message cleanup | Truncated messages saved to DB on abort |
 | Medium | IP-level rate limit before auth check | Prevents credential stuffing |
 | Medium | Analytics event tracking | Platform events for onboarding, project creation, credit spend |
 | Low | Encrypt `supabase_service_key` at rest | Currently stored plaintext in profiles |
