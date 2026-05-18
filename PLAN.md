@@ -2415,7 +2415,9 @@ Week 7:   Phase 11b (Mock data cleanup + UI fixes)                 ✅ Done
 Week 9:   Phase 12 (Fly.io machine integration)                    ✅ Done
 Week 10:  Phase 13 (Supabase auto-provisioning)                    ✅ Done
 Week 11:  Phase 14 (Credits + Stripe billing)                      ✅ Done
-Week 12:  Phase 15 (Polish + deployment)                           ← current
+Week 12:  Phase 15 (Polish + security hardening + QA)              ✅ Done
+          ── pnpm build ✅  pnpm typecheck ✅  481-node graph ✅ ──
+Next:     Deployment (Cloudflare Pages) + Post-launch backlog      ← current
 ```
 
 ---
