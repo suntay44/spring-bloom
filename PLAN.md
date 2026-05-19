@@ -2389,6 +2389,31 @@ $$);
 
 ---
 
+## Phase 18: Stripe Claimable Sandboxes for User Apps
+
+**Goal:** Every user-generated app gets a platform-provisioned Stripe test sandbox automatically. The end user can claim it into their own Stripe account when ready to go live.
+
+**Status:** 📋 Planned
+
+### Flow
+1. On app scaffold, platform creates an anonymous Stripe test sandbox via the Stripe API using the platform service key
+2. Sandbox publishable + secret keys are injected into the user app's Fly machine env (`STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY` — test mode only)
+3. Secret key is stored in `app_stripe_sandboxes` table (RLS: service-role only — same pattern as `user_secrets`)
+4. "Connect your Stripe" UI in project settings generates a Stripe App claim link
+5. User installs the Stripe App → Stripe transfers sandbox ownership to user's Stripe account
+6. Platform stops injecting platform-owned test keys; user manages keys going forward
+
+### Hard Rules
+- Platform Stripe secret key is server-only; never returned to client
+- Sandbox secret key written only via server API route, stored in `app_stripe_sandboxes` with zero-policy RLS
+- No Stripe keys in `profiles` table
+- New table `app_stripe_sandboxes` requires RLS with NO authenticated-role policies (service-role only, same as `user_secrets`)
+
+### Estimated effort
+2–3 days backend + 1 day UI
+
+---
+
 ## Build Order Summary
 
 ```
