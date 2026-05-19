@@ -76,15 +76,37 @@ export async function getMachine(machineId: string): Promise<FlyMachine> {
 export async function execOnMachine(
   machineId: string,
   command: string[],
-  cwd = '/app'
+  cwd = '/app',
+  timeoutSec = 30
 ): Promise<{ stdout: string; stderr: string; exit_code: number }> {
   const res = await fetch(`${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines/${machineId}/exec`, {
     method: 'POST',
     headers: headers(),
-    body: JSON.stringify({ command, cwd, timeout: 30 }),
+    body: JSON.stringify({ command, cwd, timeout: timeoutSec }),
   })
   if (!res.ok) throw new Error(`Fly exec failed: ${res.status}`)
   return res.json() as Promise<{ stdout: string; stderr: string; exit_code: number }>
+}
+
+// Read a single file from the machine as base64. IDOR-guarded path.
+export async function readFileAsBase64(machineId: string, absPath: string): Promise<string> {
+  if (!/^\/app\/[\w.\-/]+$/.test(absPath)) {
+    throw new Error(`Unsafe file path rejected: ${absPath}`)
+  }
+  const result = await execOnMachine(machineId, [
+    'sh', '-c', 'base64 -w0 "$1"', '--', absPath,
+  ])
+  return result.stdout
+}
+
+// List every file under /app/dist (build output). Returns [] if dist doesn't exist.
+export async function listDistFiles(machineId: string): Promise<string[]> {
+  try {
+    const result = await execOnMachine(machineId, ['find', '/app/dist', '-type', 'f'])
+    return result.stdout.split('\n').filter(Boolean)
+  } catch {
+    return []
+  }
 }
 
 // Write a single file to the machine via exec + base64.

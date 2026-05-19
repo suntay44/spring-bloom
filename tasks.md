@@ -4,8 +4,12 @@
 > After each phase run `pnpm typecheck` and verify dev server renders correctly before moving on.
 > All paths are relative to the project root.
 >
-> **Status**: Phases 1–17 scaffold complete and verified. `pnpm build` passes clean. Zero TypeScript errors.
-> **Current**: Phase 16 (Subscription Billing) + Phase 17 scaffold done. Next = Deployment.
+> **Status**: Phases 1–17 scaffold complete and verified. `pnpm build` passes clean. Zero TypeScript errors. Codex P0–P2 security/billing findings fixed.
+> **Current**: Phase 16 (Subscription Billing) complete + Phase 17 publish pipeline implemented. Next = Deployment (run migrations 007–009 in production).
+>
+> **Migration Status**:
+> - 001–006: applied in production ✅
+> - 007–013: pending production run — use `docs/deploy/PRODUCTION_MIGRATIONS.md` (only 007–009 exist on disk today; runbook covers all present)
 
 ---
 
@@ -142,14 +146,17 @@ All frontend UI phases complete. UI/UX gate accepted. Not re-opened.
 
 ## ── NEXT ── Deployment
 
-### D1 — Run migration 006 in production Supabase
+### D1 — Run migrations 007–013 in production Supabase
 
-- [ ] In Supabase SQL editor (production project):
-  ```sql
-  ALTER TABLE public.credit_transactions
-    ADD CONSTRAINT credit_transactions_stripe_session_id_unique
-    UNIQUE (stripe_session_id);
-  ```
+> Migrations **001–006 are already applied** in production. The pending set is **007–013**
+> (only 007–009 currently exist on disk; the rest will be appended as they are authored).
+> Apply them manually via the dashboard using the runbook — **do not** run an auto-apply script.
+
+- [ ] Follow `docs/deploy/PRODUCTION_MIGRATIONS.md` — open Supabase Dashboard → SQL Editor,
+      run each migration block (007 → 008 → 009 → …) in numeric order, run the verification
+      query after each, and confirm the expected result before proceeding to the next.
+- [ ] All pending migrations use `IF NOT EXISTS` / `CREATE OR REPLACE` / conditional guards,
+      so each block is safe to re-run.
 
 ### D2 — Vercel deployment (current)
 
@@ -177,25 +184,25 @@ All frontend UI phases complete. UI/UX gate accepted. Not re-opened.
 
 ## ── PHASE 17 ── Publish & Custom Domains (Cloudflare)
 
-> Scaffold in place. Full implementation pending.
+> ✅ Full implementation complete (commit: Phase 17 publish pipeline).
 
-### P17-1 — DB + API scaffold ✅ (done in Wave 2)
+### P17-1 — DB + API scaffold ✅
 - [x] Migration 008: projects.published_url, published_at, custom_domain, cloudflare_deployment_id, publish_slug
-- [x] lib/cloudflare/client.ts — Pages API + custom hostname wrapper
-- [x] app/api/publish/route.ts — stub (501) with auth + ownership check
+- [x] lib/cloudflare/client.ts — Direct Upload v2 (sha256 manifest, 25MB cap, typed CF responses)
+- [x] app/api/publish/route.ts — full 7-step pipeline (machine check → CF project → build → read dist → deploy → DB write → return url)
 
-### P17-2 — Build + Deploy pipeline
-- [ ] Get files from Fly machine via /api/fly/machine/[id]/files
-- [ ] Run build command in Fly machine (npm run build)
-- [ ] Upload dist/ to Cloudflare Pages via Direct Upload API
-- [ ] Store cloudflare_deployment_id + published_url in projects table
-- [ ] Return { url: 'https://{slug}.springbloom.app' }
+### P17-2 — Build + Deploy pipeline ✅
+- [x] lib/fly/client.ts — readFileAsBase64 (IDOR path guard), listDistFiles, execOnMachine timeoutSec param
+- [x] Run build command in Fly machine (npm run build, 300s timeout)
+- [x] Upload dist/ to Cloudflare Pages via Direct Upload API
+- [x] Store cloudflare_deployment_id + published_url in projects table
+- [x] Return { url: 'https://{slug}.springbloom.app' }
 
-### P17-3 — Publish UI
-- [ ] "Publish" button in builder toolbar
-- [ ] Publish progress modal (3 steps: Building → Uploading → Live)
-- [ ] Show published URL with copy button after success
-- [ ] "Unpublish" to clear published_url
+### P17-3 — Publish UI ✅
+- [x] "Publish" button in builder toolbar (BuilderMock.tsx)
+- [x] Publish progress modal (3 steps: Building → Uploading → Live) — components/builder/PublishModal.tsx
+- [x] Show published URL with copy button after success (2s "Copied!" feedback)
+- [ ] "Unpublish" to clear published_url (post-launch backlog)
 
 ### P17-4 — Custom Domains
 - [ ] Custom domain input in project settings

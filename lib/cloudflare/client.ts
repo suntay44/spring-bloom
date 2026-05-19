@@ -1,5 +1,7 @@
 // SERVER ONLY — never import in client components
 
+import { createHash } from 'crypto'
+
 const CF_BASE = 'https://api.cloudflare.com/client/v4'
 const ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID!
 const API_TOKEN = process.env.CLOUDFLARE_API_TOKEN!
@@ -26,19 +28,72 @@ export async function createPagesProject(projectName: string): Promise<{ id: str
   return data.result
 }
 
-// Deploy a set of files to Cloudflare Pages via Direct Upload
-// files: Record<path, content as string>
-export async function deployToPages(projectName: string, files: Record<string, string>): Promise<{ deploymentId: string; url: string }> {
-  // 1. Create a deployment
-  const deployRes = await fetch(`${CF_BASE}/accounts/${ACCOUNT_ID}/pages/projects/${projectName}/deployments`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${API_TOKEN}` },
-    // Cloudflare Pages Direct Upload uses multipart form with file manifest
-    // This is a stub — real implementation uses the Wrangler Pages Upload API
-    body: JSON.stringify({ files }),
-  })
-  const deployData = await deployRes.json() as { result: { id: string; url: string }; success: boolean; errors: unknown[] }
-  if (!deployRes.ok || !deployData.success) throw new Error(`CF Pages deploy failed: ${JSON.stringify(deployData.errors)}`)
+// Maximum total payload size for a Direct Upload deployment (25 MB).
+const MAX_TOTAL_BYTES = 25 * 1024 * 1024
+
+// Minimal MIME map for static site assets. Falls back to octet-stream.
+function mimeFor(path: string): string {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+  const map: Record<string, string> = {
+    html: 'text/html', htm: 'text/html', css: 'text/css', js: 'application/javascript',
+    mjs: 'application/javascript', json: 'application/json', svg: 'image/svg+xml',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', ico: 'image/x-icon', txt: 'text/plain', xml: 'application/xml',
+    woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', map: 'application/json',
+    wasm: 'application/wasm', avif: 'image/avif', mp4: 'video/mp4', webm: 'video/webm',
+  }
+  return map[ext] ?? 'application/octet-stream'
+}
+
+interface CFDeploymentResponse {
+  result: { id: string; url: string } | null
+  success: boolean
+  errors: unknown[]
+}
+
+// Deploy a set of files to Cloudflare Pages via the Direct Upload v2 API.
+// `files`: Record<relativePath, base64-encoded file contents>.
+export async function deployToPages(
+  projectName: string,
+  files: Record<string, string>
+): Promise<{ deploymentId: string; url: string }> {
+  const form = new FormData()
+  const manifest: Record<string, string> = {}
+  let totalBytes = 0
+
+  for (const [relPath, base64] of Object.entries(files)) {
+    const buf = Buffer.from(base64, 'base64')
+    totalBytes += buf.byteLength
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      throw new Error(
+        `Build output exceeds the 25MB Cloudflare Pages Direct Upload limit (${totalBytes} bytes)`
+      )
+    }
+    const hash = createHash('sha256').update(buf).digest('hex')
+    const normalizedPath = relPath.startsWith('/') ? relPath : `/${relPath}`
+    manifest[normalizedPath] = hash
+    // Each file blob is keyed by its sha256 hex digest.
+    form.append(
+      hash,
+      new Blob([new Uint8Array(buf)], { type: mimeFor(relPath) }),
+      hash
+    )
+  }
+
+  form.append('manifest', JSON.stringify(manifest))
+
+  const deployRes = await fetch(
+    `${CF_BASE}/accounts/${ACCOUNT_ID}/pages/projects/${projectName}/deployments`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
+      body: form,
+    }
+  )
+  const deployData = (await deployRes.json()) as CFDeploymentResponse
+  if (!deployRes.ok || !deployData.success || !deployData.result) {
+    throw new Error(`CF Pages deploy failed: ${JSON.stringify(deployData.errors)}`)
+  }
   return { deploymentId: deployData.result.id, url: deployData.result.url }
 }
 

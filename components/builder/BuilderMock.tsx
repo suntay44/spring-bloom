@@ -10,6 +10,7 @@ import { DiffPanel } from "@/components/builder/panels/DiffPanel";
 import { FilesPanel } from "@/components/builder/panels/FilesPanel";
 import { FindingsPanel } from "@/components/builder/panels/FindingsPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
+import { PublishModal } from "@/components/builder/PublishModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -56,6 +57,7 @@ function TooltipButton({ label, ariaLabel = label, children, onClick }: { label:
 
 export function BuilderMock({ project, initialMessages = [], machineId, user }: BuilderMockProps) {
   const [tab, setTab] = useState<BuilderTab>("Preview");
+  const [publishOpen, setPublishOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -142,13 +144,15 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
           </Tooltip>
           <TooltipButton ariaLabel="Connect GitHub" label="GitHub" onClick={() => toast("Connect GitHub in Settings → Integrations")}><Github size={17} /></TooltipButton>
           <Tooltip>
-            <TooltipTrigger render={<Button onClick={() => toast("Deploying to Vercel... (mock)")} type="button" />}>
+            <TooltipTrigger render={<Button onClick={() => setPublishOpen(true)} type="button" variant="default" />}>
               <Upload size={16} /> Publish
             </TooltipTrigger>
             <TooltipContent>Publish</TooltipContent>
           </Tooltip>
         </div>
       </header>
+
+      <PublishModal open={publishOpen} onOpenChange={setPublishOpen} projectId={project.id} />
 
       <main className="builder-workspace">
         {!sidebarCollapsed ? <ChatPanel initialMessages={initialMessages} machineId={machine.machineId} projectId={project.id} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} onVisualEditsToggle={toggleVisualEdits} visualEdits={visualEdits} /> : null}
