@@ -6,6 +6,10 @@ interface ProjectContext {
   primaryColor?: string | null
   dbSchema?: string | null
   backendMode: 'managed_supabase' | 'own_supabase' | 'decide_later'
+  /** Phase 19: project brief answers collected during onboarding flow */
+  briefAnswers?: Record<string, unknown> | null
+  /** Phase 19: initial prompt from the project brief */
+  initialPrompt?: string | null
 }
 
 const SECURITY_RULES = `
@@ -71,7 +75,32 @@ function projectInstructions(ctx: ProjectContext): string {
   return parts.join('\n')
 }
 
+/** Phase 19: wire the collected project brief into the system prompt context. */
+function briefContext(ctx: ProjectContext): string {
+  const parts: string[] = []
+
+  if (ctx.initialPrompt) {
+    parts.push(`ORIGINAL PROJECT VISION:\n"${ctx.initialPrompt}"`)
+  }
+
+  if (ctx.briefAnswers && Object.keys(ctx.briefAnswers).length > 0) {
+    const formatted = Object.entries(ctx.briefAnswers)
+      .map(([q, a]) => `  ${q}: ${String(a)}`)
+      .join('\n')
+    parts.push(`PROJECT BRIEF (user-answered onboarding questions):\n${formatted}`)
+  }
+
+  if (parts.length === 0) return ''
+
+  return [
+    'USER INTENT CONTEXT (use this to inform design and feature decisions):',
+    ...parts,
+  ].join('\n')
+}
+
 export function buildSystemPrompt(ctx: ProjectContext): string {
+  const brief = briefContext(ctx)
+
   return [
     SECURITY_RULES,
     '',
@@ -80,6 +109,7 @@ export function buildSystemPrompt(ctx: ProjectContext): string {
     frameworkInstructions(ctx),
     '',
     projectInstructions(ctx),
+    ...(brief ? ['', brief] : []),
     '',
     `OUTPUT FORMAT:
 When generating code, wrap all file and shell actions inside a single <boltArtifact> tag:

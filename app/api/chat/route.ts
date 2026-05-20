@@ -7,6 +7,8 @@ import { buildContextMessages } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
 import { estimateCredits } from '@/lib/ai/credit-estimator'
 import { chatRateLimit } from '@/lib/rate-limit'
+import { enhancePrompt } from '@/lib/ai/prompt-enhancer'
+import { trackBuild } from '@/lib/library/build-tracker'
 
 export const maxDuration = 60
 
@@ -41,8 +43,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'projectId, modelId, and messages are required' }, { status: 400 })
   }
 
-  // Load project (select only what's needed — never select *)
-  const [{ data: project }, { data: modelPricing }] = await Promise.all([
+  // Load project + project brief in parallel
+  const [{ data: project }, { data: modelPricing }, { data: projectBrief }] = await Promise.all([
     supabase
       .from('projects')
       .select('id, type, framework, design_style, primary_color, db_schema, backend_mode')
@@ -55,6 +57,13 @@ export async function POST(req: Request) {
       .eq('model_id', modelId)
       .eq('is_active', true)
       .single(),
+    // Phase 19: load brief answers to wire into system prompt + enhancer
+    supabase
+      .from('project_briefs')
+      .select('initial_prompt, answers')
+      .eq('project_id', projectId)
+      .eq('user_id', user.id)
+      .maybeSingle(),
   ])
 
   if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
@@ -89,25 +98,36 @@ export async function POST(req: Request) {
 
   // Credit check
   const balance = await getBalance(user.id)
-  const lastUserMessage = extractText(messages[messages.length - 1])
-  const estimate = estimateCredits(lastUserMessage, modelId, modelPricing.credits_per_1m_output)
+  const rawUserMessage = extractText(messages[messages.length - 1])
+
+  // Phase 19: enhance prompt before credit estimation and generation.
+  // Falls back to the original message on any error — generation never blocks.
+  const briefAnswers = (projectBrief?.answers as Record<string, unknown> | null) ?? null
+  const enhancedMessage = await enhancePrompt(rawUserMessage, {
+    framework:    project.framework,
+    projectType:  project.type,
+    briefAnswers,
+    messageIndex: messages.length - 1,
+  })
+
+  const estimate = estimateCredits(enhancedMessage, modelId, modelPricing.credits_per_1m_output)
   if (balance < estimate.min) {
     return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
   }
 
-  // Create agent run row
+  // Create agent run row (store the enhanced prompt so we can replay it)
   const { data: agentRun, error: runError } = await supabase
     .from('agent_runs')
     .insert({
-      project_id: projectId,
-      user_id: user.id,
-      prompt: lastUserMessage,
-      model_provider: modelPricing.provider,
-      model_id: modelId,
-      model_label: modelPricing.display_name,
+      project_id:        projectId,
+      user_id:           user.id,
+      prompt:            enhancedMessage,
+      model_provider:    modelPricing.provider,
+      model_id:          modelId,
+      model_label:       modelPricing.display_name,
       estimated_credits: estimate.estimate,
-      held_credits: estimate.estimate,
-      status: 'building',
+      held_credits:      estimate.estimate,
+      status:            'building',
     })
     .select('id')
     .single()
@@ -116,20 +136,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create agent run' }, { status: 500 })
   }
 
-  // Place credit hold — do this before saving the user message so that if it
-  // fails we don't leave orphaned messages in the DB.
+  // Place credit hold before saving user message
   await holdCredits(user.id, estimate.estimate, agentRun.id, projectId)
 
-  // Save user message only after hold succeeds
+  // Save the raw (user-visible) message to the messages table
   await supabase.from('messages').insert({
-    project_id: projectId,
-    role: 'user',
-    content: lastUserMessage,
-    model_id: modelId,
+    project_id:   projectId,
+    role:         'user',
+    content:      rawUserMessage,
+    model_id:     modelId,
     credits_used: 0,
   })
 
-  // Load message history for context (after saving so the new message is included)
+  // Load message history for context
   const { data: dbMessages } = await supabase
     .from('messages')
     .select('role, content')
@@ -137,16 +156,28 @@ export async function POST(req: Request) {
     .order('created_at', { ascending: true })
     .limit(30)
 
-  const contextMessages = buildContextMessages(dbMessages ?? [], undefined, [])
+  // Replace the last user message in context with the enhanced version so the
+  // model sees the richer spec, while the user still sees their original words.
+  const messagesForContext = (dbMessages ?? []).map((m, idx, arr) => {
+    if (m.role === 'user' && idx === arr.length - 1 && enhancedMessage !== rawUserMessage) {
+      return { ...m, content: enhancedMessage }
+    }
+    return m
+  })
 
+  const contextMessages = buildContextMessages(messagesForContext, undefined, [])
+
+  // Phase 19: system prompt now includes brief context
   const systemPrompt = buildSystemPrompt({
-    projectType: project.type,
-    framework: project.framework,
-    fileTree: [],
-    designStyle: project.design_style,
-    primaryColor: project.primary_color,
-    dbSchema: project.db_schema,
-    backendMode: project.backend_mode,
+    projectType:   project.type,
+    framework:     project.framework,
+    fileTree:      [],
+    designStyle:   project.design_style,
+    primaryColor:  project.primary_color,
+    dbSchema:      project.db_schema,
+    backendMode:   project.backend_mode,
+    briefAnswers,
+    initialPrompt: projectBrief?.initial_prompt ?? null,
   })
 
   const result = streamText({
@@ -154,10 +185,8 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages: contextMessages,
     onFinish: async ({ totalUsage, text }) => {
-      // Wrap in try/catch — if finalization fails the stream has already completed
-      // successfully for the user; we log the error but don't crash.
       try {
-        const tokensInput = totalUsage.inputTokens ?? 0
+        const tokensInput  = totalUsage.inputTokens ?? 0
         const tokensOutput = totalUsage.outputTokens ?? 0
 
         const actualCredits = await finalizeCredits(
@@ -168,7 +197,7 @@ export async function POST(req: Request) {
           {
             tokensInput,
             tokensOutput,
-            creditsPerMInput: modelPricing.credits_per_1m_input,
+            creditsPerMInput:  modelPricing.credits_per_1m_input,
             creditsPerMOutput: modelPricing.credits_per_1m_output,
           },
           estimate.estimate
@@ -176,26 +205,33 @@ export async function POST(req: Request) {
 
         await Promise.all([
           supabase.from('messages').insert({
-            project_id: projectId,
-            role: 'assistant',
-            content: text,
-            model_id: modelId,
+            project_id:   projectId,
+            role:         'assistant',
+            content:      text,
+            model_id:     modelId,
             credits_used: actualCredits,
           }),
           supabase.from('agent_runs').update({
-            status: 'completed',
+            status:        'completed',
             final_credits: actualCredits,
-            tokens_input: tokensInput,
+            tokens_input:  tokensInput,
             tokens_output: tokensOutput,
-            finished_at: new Date().toISOString(),
+            finished_at:   new Date().toISOString(),
           }).eq('id', agentRun.id),
         ])
+
+        // Phase 19: fire-and-forget fingerprinting — never blocks the response
+        void trackBuild({
+          projectId,
+          agentRunId:   agentRun.id,
+          userId:       user.id,
+          userPrompt:   enhancedMessage,
+          artifactText: text,
+          projectType:  project.type,
+        })
+
       } catch (err) {
-        // Log server-side only — never expose internal errors to the client
         console.error('[chat/onFinish] Failed to finalize run:', err)
-        // finalizeCredits inserts refund+deduct atomically; if it threw, the
-        // original hold is still stranded. Cancel it so the user isn't charged
-        // for a run that never completed accounting.
         try {
           await cancelHold(user.id, estimate.estimate, agentRun.id, projectId)
         } catch (refundErr) {
@@ -204,13 +240,10 @@ export async function POST(req: Request) {
         await supabase.from('agent_runs')
           .update({ status: 'failed', finished_at: new Date().toISOString() })
           .eq('id', agentRun.id)
-          .then(null, () => null) // best-effort
+          .then(null, () => null)
       }
     },
     onError: async (event) => {
-      // Stream errored/aborted before onFinish — onFinish will NOT fire, so the
-      // hold placed before streaming is orphaned. Cancel it and mark the run
-      // failed. (finalizeCredits never ran here, so no double-refund risk.)
       console.error('[chat/onError] Stream failed:', event.error)
       try {
         await cancelHold(user.id, estimate.estimate, agentRun.id, projectId)
@@ -220,7 +253,7 @@ export async function POST(req: Request) {
       await supabase.from('agent_runs')
         .update({ status: 'failed', finished_at: new Date().toISOString() })
         .eq('id', agentRun.id)
-        .then(null, () => null) // best-effort
+        .then(null, () => null)
     },
   })
 

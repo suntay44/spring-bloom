@@ -2414,6 +2414,173 @@ $$);
 
 ---
 
+## Phase 20: Internal Admin Dashboard (`/backend-admin`)
+
+**Goal:** A password-protected internal tool for operators (us) to manage the platform — search users, inspect any project and its AI conversation history, curate the Phase 19 library system, and manage 3rd-party service configuration — all without touching the Supabase dashboard directly.
+
+**Status:** 📋 Planned (build after Phase 19)
+
+---
+
+### Access Control
+
+- Route group: `app/(admin)/backend-admin/`
+- Middleware guard: check `profiles.is_admin = true` for the authenticated user (new boolean column, default false, service-role-only write via RLS trigger)
+- Hard redirect to `/login` if not admin — no 403 page, no hint the route exists
+- Admin flag set manually via Supabase dashboard on operator accounts only
+- All admin API routes under `app/api/admin/` — re-verify `is_admin` server-side on every request (never trust middleware alone)
+
+---
+
+### Section 1 — Users
+
+**Route:** `/backend-admin/users`
+
+| Feature | Detail |
+|---------|--------|
+| Search | By email, user ID, name — debounced input, server-side query |
+| Filter | By plan (free / starter / pro / teams), status (active / suspended), signup date range |
+| User table | Email, plan, credits balance, project count, last active, signup date |
+| Row actions | View detail, impersonate (future), suspend |
+
+**Route:** `/backend-admin/users/[id]`
+
+- Profile card: email, plan, subscription status, credits balance, Supabase project ref, Fly machine status
+- Credit ledger: full `credit_transactions` history (type, amount, timestamp, agent run link)
+- Projects list: all projects with status, last message, published URL
+
+---
+
+### Section 2 — Projects & Prompt History
+
+**Route:** `/backend-admin/projects/[id]`
+
+- Project metadata: name, type, owner, created, Fly machine ID, published URL
+- Full message thread: every message in the conversation (role, content, timestamp, model used, tokens, credit cost)
+- Agent runs: each run's status, model, token counts, credit hold/deduct, error if any
+- Raw artifact: the last AI-generated `<boltArtifact>` payload (collapsed, expandable)
+- Links back to parent user
+
+---
+
+### Section 3 — Library Management (Phase 19 system)
+
+**Route:** `/backend-admin/library`
+
+**Template Clusters (Books)**
+- Table of all `template_clusters` with fingerprint, build count, distinct app types, avg success score, status (candidate / canonical)
+- Promote button: move a candidate cluster → canonical `scaffold_templates` (requires count ≥ 10, score ≥ 70)
+- Demote button: move canonical back to candidate if quality drops
+- View cluster members: list the individual `app_builds` that contributed to this cluster
+
+**Scaffold Templates (promoted Books)**
+- Table of all canonical `scaffold_templates`: name, category, version, times used, last used
+- Edit: name, description, tags, base scaffold JSON
+- Deprecate / re-activate
+
+**Micro-Modules (Chapters)**
+- Table of all `scaffold_modules`: name, type, version, times used, success rate
+- Add new module manually (for the Auth module hand-written exception)
+- Edit module scaffold, bump version
+- Mark deprecated
+
+---
+
+### Section 4 — 3rd Party Settings
+
+**Route:** `/backend-admin/settings`
+
+Editable config for external service defaults. Values stored in a new `platform_settings` key-value table (service-role write only). Loaded server-side, never exposed to clients.
+
+| Setting Group | Fields |
+|---------------|--------|
+| **Supabase** | Default org ID for user project provisioning, management token health check |
+| **Fly.io** | Default app name, org slug, region, machine size (RAM/CPU), base Docker image tag |
+| **Cloudflare** | Default Pages project name, zone ID, custom domain suffix (e.g. `.springbloom.app`) |
+| **Stripe** | Plan price IDs (Starter / Pro / Teams), webhook endpoint URL |
+| **AI Models** | Default model per plan tier, fallback model, max tokens per request |
+| **Rate Limits** | Requests per minute per user tier (editable without redeploying) |
+| **Credit Prices** | Credits per dollar for each pack, monthly reset amounts per plan |
+
+Each group has a "Test connection" button that pings the service and returns a green/red health status.
+
+---
+
+### DB Changes
+
+```sql
+-- New column on profiles (migration 014)
+alter table public.profiles
+  add column if not exists is_admin boolean not null default false;
+
+-- Guard: is_admin is privileged — add to guard_profile_privileged_columns trigger
+-- (update the trigger function in the same migration)
+
+-- New table: platform_settings (migration 014)
+create table if not exists public.platform_settings (
+  key   text primary key,
+  value jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table public.platform_settings enable row level security;
+-- No policies: service-role only write; admin UI reads via service-role API route
+```
+
+---
+
+### Route Structure
+
+```
+app/(admin)/
+  layout.tsx                    ← admin auth check, sidebar nav
+  backend-admin/
+    page.tsx                    ← redirect → /backend-admin/users
+    users/
+      page.tsx                  ← user search + table
+      [id]/
+        page.tsx                ← user detail + credit ledger + projects
+    projects/
+      [id]/
+        page.tsx                ← project detail + message thread + agent runs
+    library/
+      page.tsx                  ← clusters + templates + modules tabs
+    settings/
+      page.tsx                  ← 3rd party config groups
+
+app/api/admin/
+  users/route.ts                ← GET (search/filter)
+  users/[id]/route.ts           ← GET (detail)
+  projects/[id]/route.ts        ← GET (detail + messages + runs)
+  library/clusters/route.ts     ← GET list, POST promote/demote
+  library/templates/route.ts    ← GET/PUT/DELETE
+  library/modules/route.ts      ← GET/POST/PUT/DELETE
+  settings/route.ts             ← GET/PUT platform_settings
+  settings/health/route.ts      ← POST test-connection per service
+```
+
+---
+
+### Hard Rules
+
+1. Every `/api/admin/*` route re-checks `is_admin` server-side — middleware alone is not sufficient
+2. `is_admin` is write-locked by the `guard_profile_privileged_columns` trigger — only service-role can set it
+3. No admin UI data in client components — all fetches via server components or server actions
+4. Admin routes never return full service keys or tokens — health checks only (ping, not echo)
+5. All admin mutations are logged to a future `admin_audit_log` table (post-launch)
+6. No "impersonate user" feature until audit logging is in place
+
+---
+
+### Estimated Effort
+
+- 1 day: auth guard + layout + user search/detail
+- 1 day: project detail + message thread viewer
+- 1 day: library management UI (clusters, templates, modules)
+- 1 day: settings page + health checks + `platform_settings` table
+- **Total: ~4 days**
+
+---
+
 ## Build Order Summary
 
 ```
@@ -2442,7 +2609,10 @@ Week 10:  Phase 13 (Supabase auto-provisioning)                    ✅ Done
 Week 11:  Phase 14 (Credits + Stripe billing)                      ✅ Done
 Week 12:  Phase 15 (Polish + security hardening + QA)              ✅ Done
           ── pnpm build ✅  pnpm typecheck ✅  481-node graph ✅ ──
-Next:     Deployment (Cloudflare Pages) + Post-launch backlog      ← current
+Week 13:  D1–D3   (Migrations applied ✅, Vercel deploy, verification) ← current
+Next:     Phase 19 (Generation Intelligence — Prompt Enhancer + Library System)
+After:    Phase 20 (Internal Admin Dashboard — /backend-admin)
+After:    Phase 18 (Stripe Claimable Sandboxes — can run in parallel with 20)
 ```
 
 ---

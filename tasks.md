@@ -5,11 +5,10 @@
 > All paths are relative to the project root.
 >
 > **Status**: Phases 1–17 scaffold complete and verified. `pnpm build` passes clean. Zero TypeScript errors. Codex P0–P2 security/billing findings fixed.
-> **Current**: Phase 16 (Subscription Billing) complete + Phase 17 publish pipeline implemented. Next = Deployment (run migrations 007–009 in production).
+> **Current**: Phases 1–17 + Codex P0–P2 + D1 complete. Next = D2 (Vercel deploy) → D3 (verification) → Phase 19.
 >
 > **Migration Status**:
-> - 001–006: applied in production ✅
-> - 007–013: pending production run — use `docs/deploy/PRODUCTION_MIGRATIONS.md` (only 007–009 exist on disk today; runbook covers all present)
+> - 001–013: all applied and verified in production ✅
 
 ---
 
@@ -152,11 +151,7 @@ All frontend UI phases complete. UI/UX gate accepted. Not re-opened.
 > (only 007–009 currently exist on disk; the rest will be appended as they are authored).
 > Apply them manually via the dashboard using the runbook — **do not** run an auto-apply script.
 
-- [ ] Follow `docs/deploy/PRODUCTION_MIGRATIONS.md` — open Supabase Dashboard → SQL Editor,
-      run each migration block (007 → 008 → 009 → …) in numeric order, run the verification
-      query after each, and confirm the expected result before proceeding to the next.
-- [ ] All pending migrations use `IF NOT EXISTS` / `CREATE OR REPLACE` / conditional guards,
-      so each block is safe to re-run.
+- [x] All migrations 007–013 applied and verified in production ✅ (2026-05-19)
 
 ### D2 — Vercel deployment (current)
 
