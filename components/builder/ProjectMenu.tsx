@@ -3,10 +3,10 @@
 import type { ComponentType } from "react";
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, Gift, Globe2, HelpCircle, Pin, Search, Settings, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, Gift, Globe2, HelpCircle, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "@/lib/toast";
 
-export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics";
+export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations";
 
 export type ProjectMenuUser = {
   initials: string;
@@ -23,13 +23,14 @@ const MENU_ITEMS = [
 ] satisfies Array<{ label: string; icon: ComponentType<{ size?: number }>; href?: Route; meta?: string }>;
 
 const TOOL_ITEMS = [
-  { label: "Analytics", icon: BarChart3, pinned: true, tab: "Analytics" },
-  { label: "Cloud", icon: Cloud, pinned: true, tab: "Security" },
-  { label: "Code", icon: Code2, pinned: true, tab: "Diff" },
-  { label: "Files", icon: FileText, pinned: true, tab: "Files" },
-  { label: "Payments", icon: CreditCard, pinned: false, active: true },
-  { label: "Security", icon: ShieldCheck, pinned: false, tab: "Security" },
-  { label: "SEO & AI search", icon: Search, pinned: false }
+  { label: "Analytics",    icon: BarChart3,  pinned: true,  tab: "Analytics"     },
+  { label: "Cloud",        icon: Cloud,      pinned: true,  tab: "Security"      },
+  { label: "Code",         icon: Code2,      pinned: true,  tab: "Diff"          },
+  { label: "Files",        icon: FileText,   pinned: true,  tab: "Files"         },
+  { label: "Integrations", icon: Sparkles,   pinned: true,  tab: "Integrations", active: false },
+  { label: "Payments",     icon: CreditCard, pinned: false, tab: "Integrations", active: false },
+  { label: "Security",     icon: ShieldCheck,pinned: false, tab: "Security"      },
+  { label: "SEO & AI search", icon: Search,  pinned: false                       },
 ] satisfies Array<{ label: string; icon: ComponentType<{ size?: number }>; pinned: boolean; tab?: BuilderTab; active?: boolean }>;
 
 export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void }) {

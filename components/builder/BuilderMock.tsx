@@ -9,6 +9,7 @@ import { AnalyticsPanel } from "@/components/builder/panels/AnalyticsPanel";
 import { DiffPanel } from "@/components/builder/panels/DiffPanel";
 import { FilesPanel } from "@/components/builder/panels/FilesPanel";
 import { FindingsPanel } from "@/components/builder/panels/FindingsPanel";
+import { IntegrationsPanel } from "@/components/builder/panels/IntegrationsPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
 import { PublishModal } from "@/components/builder/PublishModal";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +21,7 @@ import type { MockProject, MockProjectType } from "@/lib/mock/projects";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
 import { MOCK_SECURITY_RUN } from "@/lib/mock/security";
 
-const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics"] as const;
+const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics", "Integrations"] as const;
 
 const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Preview: Globe2,
@@ -28,7 +29,8 @@ const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Diff: Code2,
   Review: ShieldCheck,
   Security: Cloud,
-  Analytics: BarChart3
+  Analytics: BarChart3,
+  Integrations: Sparkles,
 };
 
 const TYPE_LABELS: Record<MockProjectType, string> = {
@@ -64,12 +66,13 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
   const [visualEdits, setVisualEdits] = useState(false);
   const machine = useMachineProvisioner(project.id, machineId);
   const TAB_PANELS: Record<BuilderTab, () => ReactNode> = {
-    Preview: () => <PreviewPanel machineId={machine.machineId} project={project} provisioning={machine.provisioning} />,
-    Files: () => <FilesPanel machineId={machine.machineId} />,
-    Diff: () => <DiffPanel />,
-    Review: () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
-    Security: () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
-    Analytics: () => <AnalyticsPanel />
+    Preview:      () => <PreviewPanel machineId={machine.machineId} project={project} provisioning={machine.provisioning} />,
+    Files:        () => <FilesPanel machineId={machine.machineId} />,
+    Diff:         () => <DiffPanel />,
+    Review:       () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
+    Security:     () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
+    Analytics:    () => <AnalyticsPanel />,
+    Integrations: () => <IntegrationsPanel projectId={project.id} />,
   };
 
   function toggleVisualEdits() {
