@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 import {
-  CreditCard, Database, Phone, Brain, Sparkles, Mail, Key,
+  CreditCard, Database, Phone, Mail, Key,
   ChevronDown, ChevronUp, CheckCircle2, Loader2, Trash2, Plus, X,
-  ExternalLink, AlertCircle,
+  ExternalLink, AlertCircle, Plug, Clock,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -20,6 +20,20 @@ interface Integration {
 interface EnvEntry { key: string; value: string }
 
 type IntegrationType = "stripe" | "supabase" | "twilio" | "openai" | "anthropic" | "resend" | "env"
+
+// Connectors shown in the "coming soon" section — not yet wired
+const COMING_SOON_CONNECTORS = [
+  { label: "Shopify",           description: "Build an eCommerce store"                  },
+  { label: "GitHub",            description: "Sync code and trigger deployments"          },
+  { label: "Figma",             description: "Import designs directly into your app"      },
+  { label: "Notion",            description: "Read and write your Notion workspace"       },
+  { label: "Airtable",          description: "Spreadsheet-database hybrid + automation"  },
+  { label: "Salesforce",        description: "CRM data and lead management"              },
+  { label: "OpenAI",            description: "GPT models for AI-powered features"        },
+  { label: "AWS S3",            description: "Read and write files in S3 buckets"        },
+  { label: "Google Calendar",   description: "Sync events and scheduling"                },
+  { label: "Slack",             description: "Send notifications and messages"           },
+]
 
 interface IntegrationDef {
   type:         IntegrationType
@@ -69,22 +83,6 @@ const INTEGRATIONS: IntegrationDef[] = [
     ],
   },
   {
-    type: "openai", label: "OpenAI", icon: Brain,
-    description: "Use GPT models directly in your generated app.",
-    docsUrl: "https://platform.openai.com/docs",
-    fields: [
-      { key: "api_key", label: "API Key", placeholder: "sk-…", secret: true },
-    ],
-  },
-  {
-    type: "anthropic", label: "Anthropic", icon: Sparkles,
-    description: "Use Claude models directly in your generated app.",
-    docsUrl: "https://docs.anthropic.com",
-    fields: [
-      { key: "api_key", label: "API Key", placeholder: "sk-ant-…", secret: true },
-    ],
-  },
-  {
     type: "resend", label: "Resend", icon: Mail,
     description: "Transactional email — welcome emails, password resets, notifications.",
     docsUrl: "https://resend.com/docs",
@@ -123,49 +121,81 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
       <div className="border-b border-zinc-800 px-4 py-3 shrink-0">
         <h2 className="text-sm font-semibold text-white">Integrations</h2>
         <p className="text-xs text-zinc-500 mt-0.5">
-          Connect third-party services. Keys are stored securely and injected into your app's environment.
+          Connect third-party services. Keys are stored securely and injected into your app&apos;s environment.
         </p>
       </div>
 
       {/* Cards */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 size={20} className="animate-spin text-zinc-500" />
           </div>
         ) : (
           <>
-            {/* Stripe platform sandbox notice */}
-            {!getIntegration("stripe") && (
-              <div className="rounded-lg border border-purple-900/40 bg-purple-950/20 px-4 py-3 text-xs text-zinc-400 mb-1">
-                <p className="font-semibold text-purple-300 mb-0.5">Platform Test Stripe is active</p>
-                SpringBloom automatically provides a Stripe test sandbox for new apps.
-                Connect your own keys below when you&apos;re ready to go live.
-              </div>
-            )}
+            {/* ── Active integrations ── */}
+            <div className="space-y-2">
+              <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Your App</p>
 
-            {INTEGRATIONS.map(def => (
-              <IntegrationCard
-                key={def.type}
-                def={def}
-                integration={getIntegration(def.type)}
+              {/* Stripe platform sandbox notice */}
+              {!getIntegration("stripe") && (
+                <div className="rounded-lg border border-purple-900/40 bg-purple-950/20 px-4 py-3 text-xs text-zinc-400">
+                  <p className="font-semibold text-purple-300 mb-0.5">Platform Test Stripe is active</p>
+                  SpringBloom automatically provides a Stripe test sandbox for new apps.
+                  Connect your own keys below when you&apos;re ready to go live.
+                </div>
+              )}
+
+              {INTEGRATIONS.map(def => (
+                <IntegrationCard
+                  key={def.type}
+                  def={def}
+                  integration={getIntegration(def.type)}
+                  projectId={projectId}
+                  isExpanded={expanded === def.type}
+                  onToggle={() => setExpanded(prev => prev === def.type ? null : def.type)}
+                  onSaved={load}
+                  onRemoved={load}
+                />
+              ))}
+
+              {/* Custom env vars */}
+              <EnvVarsCard
                 projectId={projectId}
-                isExpanded={expanded === def.type}
-                onToggle={() => setExpanded(prev => prev === def.type ? null : def.type)}
+                integration={getIntegration("env")}
+                isExpanded={expanded === "env"}
+                onToggle={() => setExpanded(prev => prev === "env" ? null : "env")}
                 onSaved={load}
                 onRemoved={load}
               />
-            ))}
+            </div>
 
-            {/* Custom env vars */}
-            <EnvVarsCard
-              projectId={projectId}
-              integration={getIntegration("env")}
-              isExpanded={expanded === "env"}
-              onToggle={() => setExpanded(prev => prev === "env" ? null : "env")}
-              onSaved={load}
-              onRemoved={load}
-            />
+            {/* ── Connectors — coming soon ── */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Connectors</p>
+                <span className="flex items-center gap-1 rounded bg-zinc-800 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-zinc-500">
+                  <Clock size={9} /> Coming soon
+                </span>
+              </div>
+              <p className="px-1 text-[10px] text-zinc-600">
+                One-click connectors let your app talk to external tools. Configured once, available across all your projects.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {COMING_SOON_CONNECTORS.map(c => (
+                  <div
+                    key={c.label}
+                    className="flex flex-col gap-0.5 rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2.5 opacity-60"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-400">{c.label}</span>
+                      <Plug size={10} className="text-zinc-600" />
+                    </div>
+                    <span className="text-[10px] text-zinc-600 leading-snug">{c.description}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </>
         )}
       </div>
