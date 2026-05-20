@@ -237,21 +237,44 @@ export async function POST(req: Request) {
         } catch (refundErr) {
           console.error('[chat/onFinish] Hold cancellation also failed:', refundErr)
         }
+        const errMsg = err instanceof Error ? err.message : 'Unknown finalize error'
         await supabase.from('agent_runs')
-          .update({ status: 'failed', finished_at: new Date().toISOString() })
+          .update({
+            status:         'failed',
+            finished_at:    new Date().toISOString(),
+            error_message:  errMsg,
+            failure_reason: 'finalize_error',
+          })
           .eq('id', agentRun.id)
           .then(null, () => null)
       }
     },
     onError: async (event) => {
-      console.error('[chat/onError] Stream failed:', event.error)
+      const errMsg = event.error instanceof Error
+        ? event.error.message
+        : String(event.error ?? 'Stream error')
+      console.error('[chat/onError] Stream failed:', errMsg)
+
+      // Classify the failure reason for admin observability
+      const failure_reason =
+        errMsg.includes('timeout')       ? 'timeout'        :
+        errMsg.includes('rate')          ? 'rate_limited'   :
+        errMsg.includes('provider')      ? 'provider_error' :
+        errMsg.includes('overloaded')    ? 'provider_error' :
+                                           'stream_error'
+
       try {
         await cancelHold(user.id, estimate.estimate, agentRun.id, projectId)
       } catch (refundErr) {
         console.error('[chat/onError] Hold cancellation failed:', refundErr)
       }
       await supabase.from('agent_runs')
-        .update({ status: 'failed', finished_at: new Date().toISOString() })
+        .update({
+          status:         'failed',
+          finished_at:    new Date().toISOString(),
+          error_message:  errMsg,
+          failure_reason,
+        })
         .eq('id', agentRun.id)
         .then(null, () => null)
     },

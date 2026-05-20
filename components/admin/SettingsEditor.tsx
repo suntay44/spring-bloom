@@ -17,6 +17,8 @@ const GROUPS: { label: string; prefix: string; description: string }[] = [
   { label: "AI Models",   prefix: "ai.",           description: "Default model per plan and generation limits" },
   { label: "Rate Limits", prefix: "rate_limit.",   description: "Requests per minute per plan tier" },
   { label: "Credits",     prefix: "credits.",      description: "Monthly credit allocation per plan" },
+  { label: "Billing",     prefix: "billing.",      description: "Credit pricing and cost budgets (used by Cost & Margin analytics)" },
+  { label: "Analytics",   prefix: "analytics.",    description: "Data retention and default display windows" },
 ]
 
 function formatKey(key: string): string {
