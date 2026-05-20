@@ -156,9 +156,9 @@ export default async function AdminDebugPage({
         <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/30 px-4 py-3 text-xs text-zinc-400">
           <strong className="text-zinc-300">Note:</strong> Credit exhaustion failures are hidden (users returned a 402 before a run was created).
           They don&apos;t appear as agent runs — they&apos;re rejected at the API layer.
-          <Link href={buildUrl({ reason, credits: "include", days })} className="ml-2 text-purple-400 hover:underline">
+          <a href={buildUrl({ reason, credits: "include", days })} className="ml-2 text-purple-400 hover:underline">
             Show anyway
-          </Link>
+          </a>
         </div>
       )}
 
@@ -260,5 +260,5 @@ function FilterLink({
     : variant === "toggle"
       ? `${base} border border-zinc-700 text-zinc-400 hover:text-white`
       : `${base} text-zinc-500 hover:text-white`
-  return <Link href={href} className={cls}>{label}</Link>
+  return <a href={href} className={cls}>{label}</a>
 }

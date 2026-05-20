@@ -135,3 +135,21 @@ export async function listFiles(machineId: string): Promise<string[]> {
   const result = await execOnMachine(machineId, ['find', '/app', '-type', 'f', '-not', '-path', '*/node_modules/*'])
   return result.stdout.split('\n').filter(Boolean).map((f) => f.replace('/app/', ''))
 }
+
+// Inject (or replace) STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY in /app/.env.local.
+// Removes any existing STRIPE_ key lines first to avoid duplicates.
+export async function injectStripeEnv(
+  machineId: string,
+  publishableKey: string,
+  secretKey: string,
+): Promise<void> {
+  await execOnMachine(machineId, [
+    'sh', '-c',
+    'touch /app/.env.local && ' +
+    'sed -i "/^STRIPE_PUBLISHABLE_KEY=/d; /^STRIPE_SECRET_KEY=/d" /app/.env.local && ' +
+    'printf "STRIPE_PUBLISHABLE_KEY=%s\\nSTRIPE_SECRET_KEY=%s\\n" "$1" "$2" >> /app/.env.local',
+    '--',
+    publishableKey,
+    secretKey,
+  ])
+}

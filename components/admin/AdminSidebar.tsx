@@ -92,7 +92,7 @@ export function AdminSidebar() {
             <div className="flex flex-col gap-0.5">
               {section.items.map((item, i) =>
                 item.type === "link" ? (
-                  <Link
+                  <a
                     key={item.href}
                     href={item.href}
                     className={[
@@ -104,7 +104,7 @@ export function AdminSidebar() {
                   >
                     <item.icon size={14} />
                     {item.label}
-                  </Link>
+                  </a>
                 ) : (
                   <div
                     key={`${section.title}-soon-${i}`}

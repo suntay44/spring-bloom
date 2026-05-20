@@ -15,7 +15,7 @@ export function UserSearchInput() {
     if (value) sp.set("q", value)
     else sp.delete("q")
     sp.delete("page")
-    router.push(`${pathname}?${sp.toString()}`)
+    router.push(`${pathname}?${sp.toString()}` as `/${string}`)
   }, 300)
 
   const updatePlan = useCallback((plan: string) => {
@@ -23,7 +23,7 @@ export function UserSearchInput() {
     if (plan) sp.set("plan", plan)
     else sp.delete("plan")
     sp.delete("page")
-    router.push(`${pathname}?${sp.toString()}`)
+    router.push(`${pathname}?${sp.toString()}` as `/${string}`)
   }, [router, pathname, params])
 
   return (

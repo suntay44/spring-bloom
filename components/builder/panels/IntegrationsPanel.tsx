@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import {
   CreditCard, Database, Phone, Mail, Key,
   ChevronDown, ChevronUp, CheckCircle2, Loader2, Trash2, Plus, X,
-  ExternalLink, AlertCircle, Plug, Clock,
+  ExternalLink, AlertCircle, Plug, Clock, Zap, ArrowRight,
 } from "lucide-react"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -94,10 +94,26 @@ const INTEGRATIONS: IntegrationDef[] = [
 
 // ─── Main panel ──────────────────────────────────────────────────────────────
 
+interface StripeSandbox {
+  mode: "sandbox" | "live"
+  sandbox_provisioned_at: string | null
+  claimed_at: string | null
+  stripe_account_id: string | null
+}
+
 export function IntegrationsPanel({ projectId }: { projectId: string }) {
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [loading, setLoading]           = useState(true)
   const [expanded, setExpanded]         = useState<IntegrationType | null>(null)
+  const [sandbox, setSandbox]           = useState<StripeSandbox | null>(null)
+
+  const loadSandbox = useCallback(async () => {
+    try {
+      const res  = await fetch(`/api/projects/${projectId}/stripe-sandbox`)
+      const data = await res.json() as { sandbox: StripeSandbox | null }
+      setSandbox(data.sandbox ?? null)
+    } catch { /* non-fatal */ }
+  }, [projectId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -111,6 +127,7 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
   }, [projectId])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => { void loadSandbox() }, [loadSandbox])
 
   const getIntegration = (type: IntegrationType) =>
     integrations.find(i => i.type === type)
@@ -137,14 +154,12 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
             <div className="space-y-2">
               <p className="px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-600">Your App</p>
 
-              {/* Stripe platform sandbox notice */}
-              {!getIntegration("stripe") && (
-                <div className="rounded-lg border border-purple-900/40 bg-purple-950/20 px-4 py-3 text-xs text-zinc-400">
-                  <p className="font-semibold text-purple-300 mb-0.5">Platform Test Stripe is active</p>
-                  SpringBloom automatically provides a Stripe test sandbox for new apps.
-                  Connect your own keys below when you&apos;re ready to go live.
-                </div>
-              )}
+              {/* Stripe sandbox banner */}
+              <StripeSandboxBanner
+                projectId={projectId}
+                sandbox={sandbox}
+                onProvisioned={() => { void loadSandbox() }}
+              />
 
               {INTEGRATIONS.map(def => (
                 <IntegrationCard
@@ -199,6 +214,112 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Stripe Sandbox Banner ───────────────────────────────────────────────────
+
+function StripeSandboxBanner({
+  projectId,
+  sandbox,
+  onProvisioned,
+}: {
+  projectId: string
+  sandbox: StripeSandbox | null
+  onProvisioned: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+
+  async function provision() {
+    setBusy(true)
+    try {
+      await fetch(`/api/projects/${projectId}/stripe-sandbox`, { method: "POST" })
+      onProvisioned()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function goLive() {
+    setBusy(true)
+    try {
+      const res  = await fetch(`/api/projects/${projectId}/stripe-sandbox/connect`)
+      const data = await res.json() as { url?: string; error?: string }
+      if (data.url) window.location.href = data.url
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Live — user has claimed their own Stripe account
+  if (sandbox?.mode === "live") {
+    return (
+      <div className="rounded-lg border border-green-900/40 bg-green-950/20 px-4 py-3 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <CheckCircle2 size={12} className="text-green-400" />
+            <span className="text-xs font-semibold text-green-300">Stripe Live Connected</span>
+          </div>
+          <p className="text-[11px] text-zinc-500">
+            Your Stripe account is active. Payments go to your account.
+          </p>
+        </div>
+        <span className="shrink-0 rounded bg-green-900/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green-400">
+          Live
+        </span>
+      </div>
+    )
+  }
+
+  // Sandbox provisioned — show "Go Live" CTA
+  if (sandbox?.mode === "sandbox" && sandbox.sandbox_provisioned_at) {
+    return (
+      <div className="rounded-lg border border-purple-900/40 bg-purple-950/20 px-4 py-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <Zap size={12} className="text-purple-400" />
+              <span className="text-xs font-semibold text-purple-300">Test Sandbox Active</span>
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              Platform Stripe test keys are injected into your app. Safe for development — no real charges.
+            </p>
+          </div>
+          <span className="shrink-0 rounded bg-purple-900/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400">
+            Test
+          </span>
+        </div>
+        <button
+          onClick={goLive}
+          disabled={busy}
+          className="mt-3 flex items-center gap-1.5 rounded-md bg-purple-700 hover:bg-purple-600 disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+        >
+          {busy ? <Loader2 size={12} className="animate-spin" /> : <ArrowRight size={12} />}
+          Connect your Stripe to go live
+        </button>
+      </div>
+    )
+  }
+
+  // Not yet provisioned — offer to auto-provision
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+      <div className="flex items-center gap-1.5 mb-1">
+        <CreditCard size={12} className="text-zinc-400" />
+        <span className="text-xs font-semibold text-zinc-300">Stripe Payments</span>
+      </div>
+      <p className="text-[11px] text-zinc-500 mb-3">
+        Auto-provision a free Stripe test sandbox for this app. You can connect your own account later.
+      </p>
+      <button
+        onClick={provision}
+        disabled={busy}
+        className="flex items-center gap-1.5 rounded-md bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+      >
+        {busy ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+        Activate test sandbox
+      </button>
     </div>
   )
 }
