@@ -49,6 +49,7 @@ export async function enhanceMobilePrompt(
     projectType: string
     briefAnswers?: Record<string, unknown> | null
   },
+  scaffoldContext = '',
 ): Promise<string> {
   // If the prompt is already detailed, skip
   if (userPrompt.length > 200 && hasDetailedTerms(userPrompt)) {
@@ -60,10 +61,14 @@ export async function enhanceMobilePrompt(
       ? `\n\nProject brief answers from user:\n${JSON.stringify(context.briefAnswers, null, 2)}`
       : ''
 
+    const scaffoldBlock = scaffoldContext
+      ? `\n\nLibrary scaffold for this app type (follow this structure):\n${scaffoldContext}`
+      : ''
+
     const { text } = await generateText({
       model: anthropic('claude-haiku-4-5'),
       system: MOBILE_ENHANCER_SYSTEM,
-      prompt: `Framework: ${context.framework}\nProject type: ${context.projectType}${briefContext}\n\nUser prompt to enhance:\n"${userPrompt}"\n\nReturn only the enhanced prompt string.`,
+      prompt: `Framework: ${context.framework}\nProject type: ${context.projectType}${briefContext}${scaffoldBlock}\n\nUser prompt to enhance:\n"${userPrompt}"\n\nReturn only the enhanced prompt string.`,
       maxOutputTokens: 512,
     })
 

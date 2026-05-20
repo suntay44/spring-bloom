@@ -10,6 +10,7 @@
 
 import { enhanceWebPrompt } from './web-enhancer'
 import { enhanceMobilePrompt } from './mobile-enhancer'
+import { lookupTemplate } from '@/lib/library/template-lookup'
 
 export interface EnhancerContext {
   framework: string
@@ -37,11 +38,17 @@ export async function enhancePrompt(
     context.projectType === 'mobile' ||
     context.framework === 'react-native'
 
-  if (isMobile) {
-    return enhanceMobilePrompt(userPrompt, context)
+  // Look up a matching scaffold template from the library (fast, keyword-based)
+  const { context: scaffoldContext, templateName } = await lookupTemplate(userPrompt, isMobile)
+  if (templateName) {
+    console.info(`[prompt-enhancer] Matched template: ${templateName}`)
   }
 
-  return enhanceWebPrompt(userPrompt, context)
+  if (isMobile) {
+    return enhanceMobilePrompt(userPrompt, context, scaffoldContext)
+  }
+
+  return enhanceWebPrompt(userPrompt, context, scaffoldContext)
 }
 
 /** Heuristic: short imperative commands on existing UI don't need expansion. */
