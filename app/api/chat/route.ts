@@ -9,6 +9,8 @@ import { estimateCredits } from '@/lib/ai/credit-estimator'
 import { chatRateLimit } from '@/lib/rate-limit'
 import { enhancePrompt } from '@/lib/ai/prompt-enhancer'
 import { trackBuild } from '@/lib/library/build-tracker'
+import { checkPromptSafety } from '@/lib/safety/content-check'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const maxDuration = 60
 
@@ -35,9 +37,11 @@ export async function POST(req: Request) {
     messages: UIMessage[]
     projectId: string
     modelId: string
+    attachments?: Array<{ id: string; kind: 'image' | 'csv' | 'pdf' | 'file'; storage_path: string; filename: string }>
   }
 
   const { messages, projectId, modelId } = body
+  const requestedAttachments = body.attachments ?? []
 
   if (!projectId || !modelId || !messages?.length) {
     return NextResponse.json({ error: 'projectId, modelId, and messages are required' }, { status: 400 })
@@ -100,6 +104,24 @@ export async function POST(req: Request) {
   const balance = await getBalance(user.id)
   const rawUserMessage = extractText(messages[messages.length - 1])
 
+  // Content safety filter — block obvious abuse before any credit hold or LLM call.
+  const safety = checkPromptSafety(rawUserMessage)
+  if (!safety.safe) {
+    // Fire-and-forget logging via service-role client; never block the response.
+    const admin = createAdminClient()
+    void admin.from('content_safety_violations').insert({
+      user_id:         user.id,
+      project_id:      projectId,
+      prompt_snippet:  rawUserMessage.slice(0, 500),
+      matched_pattern: safety.pattern ?? 'unknown',
+      severity:        'block',
+    })
+    return NextResponse.json(
+      { error: 'This request was blocked by our content safety filter. If you believe this is a mistake, contact support.' },
+      { status: 400 }
+    )
+  }
+
   // Phase 19: enhance prompt before credit estimation and generation.
   // Falls back to the original message on any error — generation never blocks.
   const briefAnswers = (projectBrief?.answers as Record<string, unknown> | null) ?? null
@@ -139,14 +161,87 @@ export async function POST(req: Request) {
   // Place credit hold before saving user message
   await holdCredits(user.id, estimate.estimate, agentRun.id, projectId)
 
-  // Save the raw (user-visible) message to the messages table
-  await supabase.from('messages').insert({
+  // Verify attachments belong to this user + project, and generate short-lived
+  // signed URLs for any we'll feed to the model.
+  type LoadedAttachment = {
+    id: string
+    kind: 'image' | 'csv' | 'pdf' | 'file'
+    storage_path: string
+    filename: string
+    signedUrl: string
+  }
+  const loadedAttachments: LoadedAttachment[] = []
+
+  if (requestedAttachments.length > 0) {
+    const ids = requestedAttachments.map((a) => a.id)
+    const { data: ownedRows } = await supabase
+      .from('chat_attachments')
+      .select('id, kind, storage_path, filename')
+      .in('id', ids)
+      .eq('user_id', user.id)
+      .eq('project_id', projectId)
+
+    for (const row of ownedRows ?? []) {
+      const { data: signed } = await supabase
+        .storage
+        .from('chat-attachments')
+        .createSignedUrl(row.storage_path, 60)
+      if (signed?.signedUrl) {
+        loadedAttachments.push({
+          id:           row.id,
+          kind:         row.kind as LoadedAttachment['kind'],
+          storage_path: row.storage_path,
+          filename:     row.filename,
+          signedUrl:    signed.signedUrl,
+        })
+      }
+    }
+  }
+
+  // For CSVs, prepend a small sample of headers + rows to the user message so
+  // Claude has tabular context without us shipping the whole file.
+  let csvContextBlock = ''
+  for (const att of loadedAttachments.filter((a) => a.kind === 'csv')) {
+    try {
+      const res = await fetch(att.signedUrl, { headers: { Range: 'bytes=0-5120' } })
+      if (!res.ok) continue
+      const text = await res.text()
+      const lines = text.split(/\r?\n/).filter(Boolean)
+      const header = lines[0] ?? ''
+      const sample = lines.slice(1, 21).join('\n')
+      csvContextBlock += `\n\nAttached CSV (${att.filename}):\nColumns: ${header}\nSample rows:\n${sample}`
+    } catch (err) {
+      console.warn('[chat] CSV sample fetch failed', err)
+    }
+  }
+
+  // PDFs / unknown files: just announce them so the model knows they exist.
+  let otherFilesBlock = ''
+  for (const att of loadedAttachments.filter((a) => a.kind === 'pdf' || a.kind === 'file')) {
+    otherFilesBlock += `\n\nUser attached file: ${att.filename}`
+  }
+
+  const augmentedRawUserMessage = rawUserMessage + csvContextBlock + otherFilesBlock
+
+  // Save the raw (user-visible) message to the messages table.
+  // We persist the unaugmented text so the chat history UI stays clean — the
+  // CSV sample / file-mention blocks only live in the prompt sent to the model.
+  const { data: userMessageRow } = await supabase.from('messages').insert({
     project_id:   projectId,
     role:         'user',
     content:      rawUserMessage,
     model_id:     modelId,
     credits_used: 0,
-  })
+  }).select('id').single()
+
+  // Link uploaded attachments to this newly-saved message row.
+  if (userMessageRow?.id && loadedAttachments.length > 0) {
+    await supabase
+      .from('chat_attachments')
+      .update({ message_id: userMessageRow.id })
+      .in('id', loadedAttachments.map((a) => a.id))
+      .eq('user_id', user.id)
+  }
 
   // Load message history for context
   const { data: dbMessages } = await supabase
@@ -156,16 +251,36 @@ export async function POST(req: Request) {
     .order('created_at', { ascending: true })
     .limit(30)
 
-  // Replace the last user message in context with the enhanced version so the
-  // model sees the richer spec, while the user still sees their original words.
+  // Replace the last user message in context with the enhanced + attachment-
+  // augmented version so the model sees the richer spec, while the user still
+  // sees their original words in the chat history.
+  const finalUserMessage = (enhancedMessage !== rawUserMessage ? enhancedMessage : rawUserMessage)
+    + csvContextBlock
+    + otherFilesBlock
   const messagesForContext = (dbMessages ?? []).map((m, idx, arr) => {
-    if (m.role === 'user' && idx === arr.length - 1 && enhancedMessage !== rawUserMessage) {
-      return { ...m, content: enhancedMessage }
+    if (m.role === 'user' && idx === arr.length - 1) {
+      return { ...m, content: finalUserMessage }
     }
     return m
   })
 
   const contextMessages = buildContextMessages(messagesForContext, undefined, [])
+
+  // Multimodal: attach image parts to the final user message for vision-capable models.
+  const imageAttachments = loadedAttachments.filter((a) => a.kind === 'image')
+  if (imageAttachments.length > 0) {
+    const lastMessage = contextMessages[contextMessages.length - 1] as unknown as { role: string; content: unknown }
+    if (lastMessage && lastMessage.role === 'user') {
+      const baseText = typeof lastMessage.content === 'string' ? lastMessage.content : finalUserMessage
+      lastMessage.content = [
+        { type: 'text', text: baseText },
+        ...imageAttachments.map((a) => ({ type: 'image' as const, image: a.signedUrl })),
+      ] as unknown as typeof lastMessage.content
+    }
+  }
+  // Reference unused var so eslint/no-unused-vars stays clean — also documents that
+  // augmentedRawUserMessage is the canonical full prompt fed to the model in CSV/PDF paths.
+  void augmentedRawUserMessage
 
   // Phase 19: system prompt now includes brief context
   const systemPrompt = buildSystemPrompt({

@@ -1,9 +1,10 @@
 "use client";
 
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import type { Route } from "next";
 import Link from "next/link";
-import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, Gift, Globe2, HelpCircle, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, GitFork, Gift, Globe2, HelpCircle, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations";
@@ -50,10 +51,33 @@ export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void })
   );
 }
 
-export function ProjectMenu({ user }: { user: ProjectMenuUser }) {
+export function ProjectMenu({ user, projectId }: { user: ProjectMenuUser; projectId?: string }) {
+  const router = useRouter();
+  const [forking, setForking] = useState(false);
   const creditPercent = user.maxCredits > 0
     ? `${Math.round((user.credits / user.maxCredits) * 100)}%`
     : "0%";
+
+  async function handleFork() {
+    if (!projectId || forking) return;
+    if (!window.confirm("Fork this project? This will create a full copy you can edit independently.")) return;
+    setForking(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/fork`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Fork failed" }));
+        throw new Error(err.error ?? "Fork failed");
+      }
+      const json = await res.json() as { projectId: string };
+      toast.success("Project forked");
+      router.push(`/project/${json.projectId}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Fork failed";
+      toast.error(msg);
+    } finally {
+      setForking(false);
+    }
+  }
 
   return (
     <div className="project-menu">
@@ -84,6 +108,12 @@ export function ProjectMenu({ user }: { user: ProjectMenuUser }) {
       <button className="menu-row accent" onClick={() => toast("Free credits — coming soon")} type="button">
         <Gift size={16} /> Get free credits
       </button>
+      {projectId ? (
+        <button className="menu-row" disabled={forking} onClick={handleFork} type="button">
+          {forking ? <Loader2 className="animate-spin" size={16} /> : <GitFork size={16} />}
+          <span>{forking ? "Forking…" : "Fork project"}</span>
+        </button>
+      ) : null}
       <div className="menu-section">
         {MENU_ITEMS.map((item) => {
           const Icon = item.icon;

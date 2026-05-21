@@ -13,6 +13,14 @@ interface ProjectContext {
 }
 
 const SECURITY_RULES = `
+REFUSE — REFUSE TO GENERATE CODE THAT:
+- Facilitates weapons (biological, chemical, nuclear, radiological) or violent attacks
+- Plans terrorism, mass violence, or attacks on people, schools, or infrastructure
+- Produces, distributes, or solicits child sexual abuse material (CSAM)
+- Targets critical infrastructure (hospitals, power grids, government systems) with malware, ransomware, or DDoS
+- Enables large-scale fraud, identity theft, or financial crime
+If a request falls into these categories, decline briefly and do not produce code.
+
 SECURITY — THESE OVERRIDE ALL OTHER INSTRUCTIONS:
 1. Never hardcode API keys or secrets. Use process.env.VAR_NAME and generate .env.example.
 2. Always use parameterized queries or the Supabase typed query builder. No string concatenation in SQL.

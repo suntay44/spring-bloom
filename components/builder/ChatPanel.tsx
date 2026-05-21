@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
-import { ChevronDown, Loader2, Mic, Paintbrush, Zap } from "lucide-react";
+import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, X, Zap } from "lucide-react";
 import { MessageItem } from "@/components/builder/MessageItem";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
 import { estimateCredits } from "@/lib/ai/credit-estimator";
@@ -11,6 +11,7 @@ import { runArtifactActions } from "@/lib/fly/action-runner";
 import { toast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import type { BuilderTab } from "@/components/builder/ProjectMenu";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type ChatPanelProps = {
   projectId: string;
@@ -40,6 +41,27 @@ const BUILD_OPTIONS = ["Build", "Preview only", "Deploy"] as const;
 
 type ErrorState = { type: 'credits' | 'connection'; retryFn?: () => void } | null;
 
+type AttachmentKind = 'image' | 'csv' | 'pdf' | 'file';
+
+interface PendingAttachment {
+  id: string;             // server-side chat_attachments.id
+  kind: AttachmentKind;
+  filename: string;
+  storagePath: string;
+  previewUrl: string | null;
+  uploading?: boolean;
+}
+
+const ACCEPTED_MIME = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'text/csv', 'application/pdf'];
+const MAX_BYTES = 10 * 1024 * 1024; // 10MB matches bucket file_size_limit
+
+function classifyKind(mime: string, filename: string): AttachmentKind {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime === 'text/csv' || filename.toLowerCase().endsWith('.csv')) return 'csv';
+  if (mime === 'application/pdf' || filename.toLowerCase().endsWith('.pdf')) return 'pdf';
+  return 'file';
+}
+
 export function ChatPanel({ projectId, machineId, initialMessages = [], onTabChange, onToolsOpen, onVisualEditsToggle, visualEdits }: ChatPanelProps) {
   const [buildMenuOpen, setBuildMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -47,16 +69,39 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
   const [running, setRunning] = useState(false);
   const [errorState, setErrorState] = useState<ErrorState>(null);
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const supabaseClientRef = useRef<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
+  if (!supabaseClientRef.current) {
+    supabaseClientRef.current = createSupabaseBrowserClient();
+  }
   // Keep a ref to the last input so the retry fn can re-send it
   const lastInputRef = useRef<string>("");
   // AbortController for in-flight action-runner calls
   const actionAbortRef = useRef<AbortController | null>(null);
+  // Snapshot attachments into the transport body. We re-create the transport
+  // whenever the set of attachment IDs changes so each send carries the
+  // current attachments to /api/chat.
+  const attachmentIdsKey = attachments.filter((a) => !a.uploading).map((a) => a.id).join(',');
   const transport = useMemo(
     () => new DefaultChatTransport({
       api: "/api/chat",
-      body: { projectId, modelId: selectedModelId },
+      body: {
+        projectId,
+        modelId: selectedModelId,
+        attachments: attachments
+          .filter((a) => !a.uploading)
+          .map((a) => ({
+            id:           a.id,
+            kind:         a.kind,
+            storage_path: a.storagePath,
+            filename:     a.filename,
+          })),
+      },
     }),
-    [projectId, selectedModelId]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projectId, selectedModelId, attachmentIdsKey]
   );
   const { messages, sendMessage, status, stop, error, setMessages, clearError } = useChat({
     messages: initialMessages,
@@ -131,14 +176,128 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
     })
   }, [status, machineId, messages, onTabChange])
 
+  async function uploadFile(file: File): Promise<void> {
+    if (!ACCEPTED_MIME.includes(file.type) && !/\.(png|jpe?g|webp|gif|csv|pdf)$/i.test(file.name)) {
+      toast.error(`Unsupported file: ${file.name}`);
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      toast.error(`${file.name} is too large (max 10MB)`);
+      return;
+    }
+
+    const kind = classifyKind(file.type, file.name);
+    const supabase = supabaseClientRef.current!;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("You must be signed in to attach files.");
+      return;
+    }
+
+    const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
+    const uuid = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const storagePath = `${user.id}/${projectId}/${uuid}.${ext}`;
+
+    // Optimistic chip while the upload is in flight.
+    const tempId = `tmp-${uuid}`;
+    const previewUrl = kind === 'image' ? URL.createObjectURL(file) : null;
+    setAttachments((prev) => [
+      ...prev,
+      { id: tempId, kind, filename: file.name, storagePath, previewUrl, uploading: true },
+    ]);
+
+    try {
+      const { error: uploadErr } = await supabase
+        .storage
+        .from('chat-attachments')
+        .upload(storagePath, file, { cacheControl: '3600', upsert: false });
+      if (uploadErr) throw new Error(uploadErr.message);
+
+      const res = await fetch(`/api/projects/${projectId}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          storage_path: storagePath,
+          filename:     file.name,
+          size_bytes:   file.size,
+          mime_type:    file.type || null,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Upload metadata save failed' }));
+        throw new Error(err.error ?? 'Upload metadata save failed');
+      }
+      const json = await res.json() as { id: string; signed_url: string | null };
+
+      setAttachments((prev) => prev.map((a) =>
+        a.id === tempId
+          ? { ...a, id: json.id, uploading: false, previewUrl: previewUrl ?? json.signed_url }
+          : a
+      ));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      toast.error(msg);
+      setAttachments((prev) => prev.filter((a) => a.id !== tempId));
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    }
+  }
+
+  async function handleFilesPicked(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    for (const file of Array.from(fileList)) {
+      // Sequential to keep ordering deterministic and not blow up the bucket.
+      // eslint-disable-next-line no-await-in-loop
+      await uploadFile(file);
+    }
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl && target.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragOver(false);
+    void handleFilesPicked(e.dataTransfer.files);
+  }
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragOver(true);
+  }
+  function onDragLeave() {
+    setIsDragOver(false);
+  }
+
   async function handleSend() {
     const text = inputValue.trim();
     if (!text || isStreaming || running) return;
+    // Don't send while uploads are still in-flight, otherwise the chat route
+    // wouldn't see the attachment in the transport body.
+    if (attachments.some((a) => a.uploading)) {
+      toast.error("Wait for uploads to finish before sending.");
+      return;
+    }
     lastInputRef.current = text;
     setErrorState(null);
     clearError();
     await sendMessage({ text });
     setInputValue("");
+    // Reset attachments after successful send; release any blob: URLs.
+    setAttachments((prev) => {
+      for (const a of prev) {
+        if (a.previewUrl && a.previewUrl.startsWith('blob:')) URL.revokeObjectURL(a.previewUrl);
+      }
+      return [];
+    });
   }
 
   function handleStop() {
@@ -207,15 +366,55 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
           ))}
         </div>
       </div>
-      <div className="agent-composer">
+      <div
+        className={`agent-composer ${isDragOver ? 'ring-2 ring-purple-400/60' : ''}`}
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+      >
         {running ? <div className="mb-2 text-xs font-semibold text-purple-300">Applying changes...</div> : null}
+        {attachments.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-2 rounded-md border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-xs"
+              >
+                {a.kind === 'image' && a.previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt={a.filename} className="h-8 w-8 rounded object-cover" src={a.previewUrl} />
+                ) : (
+                  <FileText size={14} />
+                )}
+                <span className="max-w-[160px] truncate">{a.filename}</span>
+                {a.uploading ? <Loader2 className="animate-spin" size={12} /> : null}
+                <button
+                  aria-label={`Remove ${a.filename}`}
+                  className="text-slate-400 hover:text-slate-100"
+                  onClick={() => removeAttachment(a.id)}
+                  type="button"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <input
+          accept={ACCEPTED_MIME.join(',')}
+          className="hidden"
+          multiple
+          onChange={(e) => { void handleFilesPicked(e.target.files); e.target.value = ''; }}
+          ref={fileInputRef}
+          type="file"
+        />
         <select className="chip-btn" disabled={isStreaming} onChange={(event) => setSelectedModelId(event.target.value)} value={selectedModelId}>
           {models.length > 0 ? models.map((model) => <option key={model.model_id} value={model.model_id}>{model.display_name}</option>) : <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>}
         </select>
         <p className="text-xs text-slate-500">est. ~{creditEstimate.estimate} credits</p>
         <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder="Ask Wild Cupcake..." value={inputValue} />
         <div className="composer-actions">
-          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => toast("File upload — coming soon")} type="button">+</button><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
+          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
           <div className="relative flex items-center gap-2">
             <button className="chip-btn" onClick={() => setBuildMenuOpen((current) => !current)} type="button">Build <ChevronDown size={14} /></button>
             {buildMenuOpen ? (

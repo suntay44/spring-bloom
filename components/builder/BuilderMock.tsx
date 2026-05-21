@@ -103,7 +103,7 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
             <Badge variant="secondary">{TYPE_LABELS[project.type]}</Badge>
             <ChevronDown size={15} />
           </button>
-          {menuOpen ? <ProjectMenu user={user} /> : null}
+          {menuOpen ? <ProjectMenu projectId={project.id} user={user} /> : null}
         </div>
 
         <div className="builder-toolbar-cluster">

@@ -25,11 +25,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
       .eq("id", projectId)
       .eq("user_id", user.id)
       .single(),
+    // Load only the last 200 messages to keep initial page load fast on long chats.
+    // We fetch newest-first + limit, then reverse below so the UI still receives
+    // them in chronological (oldest-first) order.
     supabase
       .from("messages")
       .select("id, role, content")
       .eq("project_id", projectId)
-      .order("created_at"),
+      .order("created_at", { ascending: false })
+      .limit(200),
     supabase
       .from("profiles")
       .select("full_name, plan")
@@ -44,7 +48,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ projec
 
   if (!project) notFound();
 
+  // Reverse the newest-first DB rows back into chronological order for the UI.
   const initialMessages: UIMessage[] = (messages ?? [])
+    .slice()
+    .reverse()
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({
       id: m.id,

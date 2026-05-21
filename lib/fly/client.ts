@@ -36,6 +36,11 @@ export async function createMachine(projectId: string): Promise<FlyMachine> {
             ports: [{ port: 3000, handlers: ['http'] }],
             protocol: 'tcp',
             internal_port: 3000,
+            // Auto-suspend when idle (warm boot ~1s) rather than full stop (~10s cold).
+            // Only applies to newly-created machines; existing machines unaffected.
+            auto_stop_machines: 'suspend',
+            auto_start_machines: true,
+            min_machines_running: 0,
           },
         ],
       },

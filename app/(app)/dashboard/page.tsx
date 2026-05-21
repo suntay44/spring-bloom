@@ -4,6 +4,7 @@ import { ArrowUpRight, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { ForkProjectButton } from "@/components/dashboard/ForkProjectButton";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -45,11 +46,14 @@ export default async function DashboardPage() {
               <div className="mb-5 h-36 rounded-lg bg-[linear-gradient(135deg,#1f1235,#09090e)]" />
               <p className="text-sm font-semibold uppercase tracking-normal text-slate-500">{project.type}</p>
               <h2 className="mt-2 text-2xl font-semibold">{project.name}</h2>
-              <div className="mt-5 flex items-center justify-between">
+              <div className="mt-5 flex items-center justify-between gap-2">
                 <Badge variant="secondary">{project.status}</Badge>
-                <Button nativeButton={false} render={<Link href={`/project/${project.id}`} />} variant="outline">
-                  Open <ArrowUpRight size={16} />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <ForkProjectButton projectId={project.id} />
+                  <Button nativeButton={false} render={<Link href={`/project/${project.id}`} />} variant="outline">
+                    Open <ArrowUpRight size={16} />
+                  </Button>
+                </div>
               </div>
             </article>
           ))}
