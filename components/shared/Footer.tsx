@@ -1,10 +1,10 @@
 import Link from "next/link"
-import { Sprout } from "lucide-react"
+import { Logo } from "@/components/shared/Logo"
 
 const PRODUCT_LINKS = [
+  { label: "Features", href: "/features" },
   { label: "Pricing", href: "/pricing" },
-  { label: "Features", href: "/#features" },
-  { label: "Workflow", href: "/#workflow" },
+  { label: "Security", href: "/security" },
 ]
 
 const LEGAL_LINKS = [
@@ -31,14 +31,11 @@ export function Footer() {
         <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
           {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
-            <Link href="/" className="inline-flex items-center gap-2 font-bold text-white">
-              <span className="logo-mark">
-                <Sprout size={16} />
-              </span>
-              SpringBloom
+            <Link href="/">
+              <Logo />
             </Link>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-500">
-              AI-powered no-code builder for web and mobile apps. Describe it, approve it, ship it.
+            <p className="mt-4 text-sm leading-relaxed text-zinc-500">
+              AI-powered builder for web and mobile apps. Describe it, approve it, ship it.
             </p>
           </div>
 
