@@ -1,4 +1,3 @@
-import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { HeroCTAButtons } from "@/components/marketing/HeroCTAButtons";
@@ -7,22 +6,13 @@ import { PricingSection } from "@/components/marketing/PricingSection";
 import { HeroPromptSection } from "@/components/marketing/HeroPromptSection";
 import { Footer } from "@/components/shared/Footer";
 import { NewProjectClient } from "@/components/new-project/NewProjectClient";
-import { Badge } from "@/components/ui/badge";
-import { DEVELOPER_FEATURES, MARKETING_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
+import { DEVELOPER_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
 
 const HERO_STATS = [
   { title: "Plan", body: "Brief before code — scope, stack, cost estimate." },
   { title: "Build", body: "Chat on the left. Live preview on the right." },
   { title: "Ship", body: "Review, security scan, analytics from day one." },
 ] as const;
-
-const WORKFLOW_STEPS = [
-  { step: "1", title: "Describe", body: "Choose full-stack web, mobile, or landing page. Write your first idea in plain English." },
-  { step: "2", title: "Brief", body: "SpringBloom confirms your goal, stack, screens, and cost estimate — before writing a single line." },
-  { step: "3", title: "Build", body: "Approve the scope and let Agent SP 1 generate, review, and iterate with you in real time." },
-] as const;
-
-const FEATURE_HIGHLIGHTS = ["Code review built in", "Security scans", "Analytics from day one"] as const;
 
 export default async function RootPage() {
   const supabase = await createClient();
@@ -77,58 +67,12 @@ export default async function RootPage() {
         </div>
       </section>
 
-      <section className="section" id="workflow">
-        <div className="container">
-          <h2>From idea to shipped — in three steps.</h2>
-          <p className="section-lede">
-            Every project starts with a brief, not a blank canvas. Agent SP 1 scopes your build before spending a single credit on generation.
-          </p>
-          <div className="mt-8 grid-3">
-            {WORKFLOW_STEPS.map(({ step, title, body }) => (
-              <article className="card feature-card" key={title}>
-                <Badge variant="secondary">{step}</Badge>
-                <h3 className="mt-5 text-2xl font-semibold">{title}</h3>
-                <p className="mt-3 text-slate-300">{body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="section bg-zinc-950" id="features">
-        <div className="container">
-          <h2>Built for users who still care about code.</h2>
-          <p className="section-lede">Developer-grade tools are always one click away.</p>
-          <div className="mt-8 grid-3">
-            {MARKETING_FEATURES.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <article className="card feature-card" key={feature.title}>
-                  <Icon color="var(--blue)" size={28} />
-                  <h3 className="mt-5 text-xl font-semibold">{feature.title}</h3>
-                  <p className="mt-3 text-slate-300">{feature.body}</p>
-                </article>
-              );
-            })}
-          </div>
-          <div className="mt-8 rounded-lg border border-purple-900 bg-black p-6 text-white">
-            <div className="grid-3">
-              {FEATURE_HIGHLIGHTS.map((item) => (
-                <p className="flex items-center gap-3 font-semibold" key={item}>
-                  <CheckCircle2 color="#5ee0a0" /> {item}
-                </p>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ── Meet Agent SP 1 ── */}
       <section className="section" id="agent">
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
             <p className="mb-4 text-sm font-bold uppercase tracking-widest text-purple-400">Introducing</p>
-            <h2 className="text-4xl font-bold md:text-5xl">Meet Agent SP&nbsp;1</h2>
+            <h2 className="text-4xl md:text-5xl">Meet Agent SP&nbsp;1</h2>
             <p className="section-lede mt-4">
               SpringBloom's first AI agent isn't a chatbot — it's a senior developer that briefs, builds, reviews, and
               ships alongside you. It reads your intent, not just your words.
@@ -154,7 +98,7 @@ export default async function RootPage() {
             ].map(({ icon, title, body }) => (
               <div className="card feature-card" key={title}>
                 <span className="text-3xl">{icon}</span>
-                <h3 className="mt-5 text-xl font-semibold">{title}</h3>
+                <h3 className="mt-5 text-xl">{title}</h3>
                 <p className="mt-3 text-slate-300">{body}</p>
               </div>
             ))}

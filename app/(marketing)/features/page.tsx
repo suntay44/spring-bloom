@@ -181,7 +181,7 @@ export default function FeaturesPage() {
           <p className="mb-4 text-sm font-bold uppercase tracking-widest text-purple-400">
             All features
           </p>
-          <h1 className="text-5xl font-bold md:text-6xl">
+          <h1 className="text-5xl md:text-6xl">
             Built for builders<br className="hidden md:block" /> who care about code.
           </h1>
           <p className="hero-copy mx-auto max-w-2xl">
@@ -202,7 +202,7 @@ export default function FeaturesPage() {
             {/* Section header */}
             <div className="mb-10 flex items-center gap-4">
               <span className="h-px flex-1 bg-zinc-800" />
-              <h2 className="text-xl font-bold text-white">{cat.label}</h2>
+              <h2 className="text-xl text-white">{cat.label}</h2>
               <span className="h-px flex-1 bg-zinc-800" />
             </div>
 
@@ -213,7 +213,7 @@ export default function FeaturesPage() {
                   <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-950/60 text-purple-400 transition-colors group-hover:bg-purple-900/60">
                     <Icon size={20} />
                   </div>
-                  <h3 className="mb-2 font-semibold text-white">{title}</h3>
+                  <h3 className="mb-2 text-white">{title}</h3>
                   <p className="text-sm leading-relaxed text-slate-400">{body}</p>
                 </article>
               ))}
@@ -227,7 +227,7 @@ export default function FeaturesPage() {
         <div className="container">
           <div className="mb-10 flex items-center gap-4">
             <span className="h-px flex-1 bg-zinc-800" />
-            <h2 className="text-xl font-bold text-white">How we compare</h2>
+            <h2 className="text-xl text-white">How we compare</h2>
             <span className="h-px flex-1 bg-zinc-800" />
           </div>
           <div className="overflow-hidden rounded-xl border border-zinc-800">

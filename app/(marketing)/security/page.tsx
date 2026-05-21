@@ -79,7 +79,7 @@ export default function SecurityPage() {
           <div className="mx-auto mb-5 flex w-fit items-center gap-2 rounded-full border border-purple-500/30 bg-purple-950/40 px-4 py-1.5 text-sm font-semibold text-purple-300">
             <ShieldCheck size={15} /> Security
           </div>
-          <h1 className="text-5xl font-bold md:text-6xl">Security is not<br />a checkbox.</h1>
+          <h1 className="text-5xl md:text-6xl">Security is not<br />a checkbox.</h1>
           <p className="hero-copy mx-auto max-w-2xl">
             SpringBloom bakes security into every layer — generated code, deployed infrastructure,
             and platform operations. Here's exactly what we do and why.
@@ -100,7 +100,7 @@ export default function SecurityPage() {
                 <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-950/60 text-purple-400">
                   <Icon size={20} />
                 </div>
-                <h3 className="text-base font-semibold leading-snug">{title}</h3>
+                <h3 className="text-base leading-snug">{title}</h3>
                 <p className="mt-2 text-sm text-slate-400">{body}</p>
               </article>
             ))}
