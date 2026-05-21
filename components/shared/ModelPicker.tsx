@@ -36,20 +36,6 @@ const PROVIDERS: Provider[] = [
   { id: "google",    label: "Gemini" },
 ];
 
-// ── Badge colours ──────────────────────────────────────────────────────────
-
-function badgeClass(caption: string): string {
-  const c = caption.toLowerCase();
-  if (c.includes("most capable"))   return "bg-violet-600/20 text-violet-300";
-  if (c.includes("highly capable")) return "bg-violet-500/15 text-violet-400";
-  if (c.includes("capable"))        return "bg-indigo-600/20 text-indigo-300";
-  if (c.includes("latest"))         return "bg-blue-600/20 text-blue-300";
-  if (c.includes("balanced"))       return "bg-slate-600/30 text-slate-300";
-  if (c.includes("code"))           return "bg-amber-600/20 text-amber-300";
-  if (c.includes("fast"))           return "bg-emerald-600/20 text-emerald-300";
-  return "bg-zinc-700/40 text-zinc-400";
-}
-
 // ── Component ──────────────────────────────────────────────────────────────
 
 type Props = { model: AIModel; models: AIModel[]; onChange: (model: AIModel) => void };
@@ -173,9 +159,6 @@ export function ModelPicker({ model, models, onChange }: Props) {
                   onClick={() => select(m)}
                   type="button"
                 >
-                  <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold leading-tight ${badgeClass(m.caption)}`}>
-                    {m.caption}
-                  </span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{m.label}</span>
                   {isSelected ? <Check className="shrink-0 text-violet-400" size={14} /> : null}
                 </button>
