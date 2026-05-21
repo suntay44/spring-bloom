@@ -25,9 +25,9 @@ export const metadata: Metadata = {
   title: "SpringBloom — Build apps in plain English",
   description: "SpringBloom is an AI-powered app builder. Describe your idea, confirm a brief, and get production-ready web or mobile code — with built-in review, security, and analytics.",
   icons: {
-    icon: [{ url: "/logos/SpringBloom-Icon-1x1.png" }],
-    apple: "/logos/SpringBloom-Icon-1x1.png",
-    shortcut: "/logos/SpringBloom-Icon-1x1.png",
+    icon: [{ url: "/logos/SpringBloom-Icon-1x1.png?v=2" }],
+    apple: "/logos/SpringBloom-Icon-1x1.png?v=2",
+    shortcut: "/logos/SpringBloom-Icon-1x1.png?v=2",
   },
 };
 

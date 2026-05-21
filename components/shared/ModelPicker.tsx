@@ -13,6 +13,13 @@ const PROVIDER_LOGOS: Record<string, string> = {
   google:    "/logos/gemini.png",
 };
 
+// OpenAI's logo is black — needs a white background to be visible on dark UI
+const PROVIDER_ICON_BG: Record<string, string> = {
+  anthropic: "bg-zinc-800",
+  openai:    "bg-white",
+  google:    "bg-zinc-800",
+};
+
 function ProviderLogo({ providerId, size = 16 }: { providerId: string; size?: number }) {
   const src = PROVIDER_LOGOS[providerId];
   if (!src) return null;
@@ -116,7 +123,7 @@ export function ModelPicker({ model, models, onChange }: Props) {
                 onClick={() => setActiveProvider(p.id)}
                 type="button"
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-zinc-800">
+                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${PROVIDER_ICON_BG[p.id] ?? "bg-zinc-800"}`}>
                   <ProviderLogo providerId={p.id} size={15} />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -142,7 +149,10 @@ export function ModelPicker({ model, models, onChange }: Props) {
                 <ArrowLeft size={13} />
                 {p ? (
                   <span className="flex items-center gap-1.5">
-                    <ProviderLogo providerId={p.id} size={12} /> {p.label}
+                    <span className={`inline-flex items-center justify-center rounded ${PROVIDER_ICON_BG[p.id] ?? "bg-zinc-800"} p-0.5`}>
+                      <ProviderLogo providerId={p.id} size={12} />
+                    </span>
+                    {p.label}
                   </span>
                 ) : null}
               </button>
