@@ -239,17 +239,6 @@ button {
   border-radius: 10px;
   background: #101018;
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34);
-  /* overflow: hidden removed — was clipping ModelPicker dropdown */
-  overflow: visible;
-}
-
-/* Re-clip the inner card sections so the card's bg/border-radius still look right */
-.prompt-card > :first-child {
-  border-radius: 10px 10px 0 0;
-  overflow: hidden;
-}
-.prompt-card > :last-child {
-  border-radius: 0 0 10px 10px;
   overflow: hidden;
 }
 
