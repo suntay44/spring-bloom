@@ -1,5 +1,5 @@
 {
-  "name": "wild-cupcake",
+  "name": "springbloom",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -46,5 +46,11 @@
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": ">=8.5.10",
+      "postcss@<8.5.10": ">=8.5.10"
+    }
   }
 }

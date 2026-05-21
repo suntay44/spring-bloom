@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { generateOAuthState, buildConnectOAuthUrl } from '@/lib/stripe/sandbox'
+import { writeRateLimit } from '@/lib/rate-limit'
 
 export async function GET(
   req: Request,
@@ -21,6 +22,12 @@ export async function GET(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit — prevents OAuth-state spamming
+  const { success } = await writeRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+  }
 
   const { data: project } = await supabase
     .from('projects').select('id').eq('id', projectId).eq('user_id', user.id).single()

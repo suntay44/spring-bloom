@@ -3,10 +3,15 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",   // FOUT instead of FOIT — text renders immediately with fallback, swaps in Inter when ready
+  preload: true,
+});
 
 export const metadata: Metadata = {
-  title: "Wild Cupcake",
+  title: "SpringBloom",
   description: "A programmer-centric AI app builder with review, security, analytics, and credit-aware agent runs."
 };
 

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { createMachine, startMachine, getMachine, execOnMachine } from '@/lib/fly/client'
+import { machineRateLimit } from '@/lib/rate-limit'
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -32,6 +33,12 @@ export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit BEFORE any Fly API call — machine provisioning is expensive
+  const { success } = await machineRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: 'Too many machine requests. Please slow down.' }, { status: 429 })
+  }
 
   const { projectId } = await req.json() as { projectId: string }
   if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 })

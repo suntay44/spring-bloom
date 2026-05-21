@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/project", "/backend-admin"];
+// NOTE: prefixes must match the actual route mounts. "/project" only caught
+// "/project/*" (singular) and missed "/projects/*" — fixed to use both common forms.
+const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/projects", "/project", "/builder", "/backend-admin"];
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

@@ -12,6 +12,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { writeRateLimit } from "@/lib/rate-limit"
 
 // Which fields in each integration type are secrets vs public
 const SECRET_FIELDS: Record<string, string[]> = {
@@ -77,6 +78,12 @@ export async function POST(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  // Rate limit writes to prevent secret-spam / config thrashing
+  const { success } = await writeRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: "Too many requests. Please slow down." }, { status: 429 })
+  }
 
   // Verify ownership
   const { data: project } = await supabase

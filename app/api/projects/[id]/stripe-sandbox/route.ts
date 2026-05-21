@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPlatformTestKeys } from '@/lib/stripe/sandbox'
 import { injectStripeEnv } from '@/lib/fly/client'
+import { writeRateLimit } from '@/lib/rate-limit'
 
 export async function GET(
   _req: Request,
@@ -44,6 +45,12 @@ export async function POST(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit — sandbox provisioning hits Fly + writes credentials
+  const { success } = await writeRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: 'Too many requests. Please slow down.' }, { status: 429 })
+  }
 
   const { data: project } = await supabase
     .from('projects')

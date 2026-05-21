@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { execOnMachine } from '@/lib/fly/client'
+import { machineRateLimit } from '@/lib/rate-limit'
 
 // POST — run a shell command on the user's machine
 // Body: { command: string }  e.g. "npm install"
@@ -9,6 +10,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ machine
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Rate limit — arbitrary shell exec is the most abusable endpoint on the platform
+  const { success } = await machineRateLimit.limit(user.id)
+  if (!success) {
+    return NextResponse.json({ error: 'Too many exec requests. Please slow down.' }, { status: 429 })
+  }
 
   // Verify caller owns a project with this machine
   const { data: project } = await supabase

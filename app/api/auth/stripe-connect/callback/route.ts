@@ -12,6 +12,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripe } from '@/lib/stripe/client'
 import { injectStripeEnv } from '@/lib/fly/client'
@@ -33,6 +34,14 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${appUrl}/dashboard?stripe_connect=invalid`)
   }
 
+  // SECURITY: require an authenticated session before processing the callback.
+  // Without this, anyone with a leaked state token could trigger ownership transfer.
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.redirect(`${appUrl}/login?redirectTo=/dashboard`)
+  }
+
   const db = createAdminClient()
 
   // Look up the sandbox row by CSRF state
@@ -48,12 +57,18 @@ export async function GET(req: Request) {
 
   const projectId = sandbox.project_id
 
-  // Fetch the project's Fly machine ID
+  // SECURITY: verify the authenticated user actually owns this project.
+  // Prevents a different signed-in user from completing the OAuth dance with
+  // a stolen state token.
   const { data: project } = await db
     .from('projects')
-    .select('fly_machine_id')
+    .select('fly_machine_id, user_id')
     .eq('id', projectId)
     .single()
+
+  if (!project || project.user_id !== user.id) {
+    return NextResponse.redirect(`${appUrl}/dashboard?stripe_connect=forbidden`)
+  }
 
   // Exchange code for access token
   const stripe = getStripe()
