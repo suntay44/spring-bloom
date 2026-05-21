@@ -77,8 +77,9 @@ body {
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-space), ui-sans-serif, system-ui, sans-serif;
   font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+  margin: 0;
 }
 
 /* Buttons use DM Sans — clear, legible at any size */
@@ -221,20 +222,40 @@ button {
 }
 
 .hero {
-  min-height: 620px;
-  padding: 52px 0 44px;
+  min-height: 640px;
+  padding: 60px 0 52px;
+  position: relative;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 50% 0%, rgba(109, 40, 217, 0.24) 0 13%, transparent 34%),
+    radial-gradient(circle at 50% 0%, rgba(109, 40, 217, 0.22) 0 14%, transparent 36%),
     linear-gradient(180deg, #0b0a10 0%, #111019 58%, #08080c 100%);
+}
+
+/* Dot-grid pattern overlay */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero > * {
+  position: relative;
+  z-index: 1;
 }
 
 .hero h1 {
   margin: 24px 0 16px;
   color: white;
-  font-size: clamp(36px, 5vw, 62px);
-  line-height: 1.06;
+  font-size: clamp(40px, 5.6vw, 72px);
+  line-height: 1.04;
   text-align: center;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
   font-weight: 700;
 }
 
@@ -2189,7 +2210,309 @@ button {
   }
 }
 
+/* ── Scroll-triggered animations (AnimateIn component) ───────────────────── */
+
+.animate-in-bottom,
+.animate-in-left,
+.animate-in-right,
+.animate-in-fade {
+  opacity: 0;
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.animate-in-bottom { transform: translateY(28px); }
+.animate-in-left   { transform: translateX(-28px); }
+.animate-in-right  { transform: translateX(28px); }
+.animate-in-fade   { transform: none; }
+
+.animate-in-bottom.is-visible,
+.animate-in-left.is-visible,
+.animate-in-right.is-visible,
+.animate-in-fade.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .animate-in-bottom,
+  .animate-in-left,
+  .animate-in-right,
+  .animate-in-fade {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ── /security page ───────────────────────────────────────────────────────── */
+
+.security-hero {
+  padding: 100px 0 80px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(109,40,217,0.18) 0%, transparent 70%),
+    var(--bg);
+}
+
+.security-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--purple-bright);
+  background: rgba(167,139,250,0.1);
+  border: 1px solid rgba(167,139,250,0.2);
+  border-radius: 99px;
+  padding: 5px 14px;
+  margin-bottom: 28px;
+}
+
+.security-hero-h1 {
+  font-size: clamp(42px, 6vw, 80px);
+  letter-spacing: -0.04em;
+  line-height: 1.02;
+  margin: 0 auto 20px;
+  max-width: 700px;
+}
+
+.security-hero-sub {
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* Alternating slides */
+.security-slides {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.security-slide {
+  padding: 80px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.security-slide:nth-child(even) {
+  background: rgba(255,255,255,0.015);
+}
+
+.security-slide-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+.security-slide-inner--reverse {
+  direction: rtl;
+}
+
+.security-slide-inner--reverse > * {
+  direction: ltr;
+}
+
+.security-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--purple-bright);
+  margin: 0 0 14px;
+}
+
+.security-slide-h2 {
+  font-size: clamp(26px, 3vw, 40px);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 18px;
+  color: white;
+}
+
+.security-slide-body {
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Stat card — the visual side */
+.security-stat-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.security-stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(167,139,250,0.12);
+  border: 1px solid rgba(167,139,250,0.2);
+  color: var(--purple-bright);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.security-stat-number {
+  font-family: var(--font-space), sans-serif;
+  font-size: clamp(40px, 5vw, 64px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: white;
+  margin: 0;
+  line-height: 1;
+}
+
+.security-stat-label {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Practices grid */
+.security-practices {
+  margin-top: 48px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.security-practice-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 24px;
+  background: rgba(10,7,18,0.9);
+  font-size: 14px;
+  line-height: 1.5;
+  color: #d4d4d8;
+  transition: background 0.15s ease;
+}
+
+.security-practice-item:hover {
+  background: rgba(167,139,250,0.05);
+}
+
+.security-practice-check {
+  color: #4ade80;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Disclosure */
+.security-disclosure {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 56px 48px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 24px;
+}
+
+.security-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(167,139,250,0.4);
+  color: var(--purple-bright);
+  border-radius: 10px;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.security-cta-btn:hover {
+  background: rgba(167,139,250,0.08);
+  border-color: rgba(167,139,250,0.6);
+}
+
+@media (max-width: 768px) {
+  .security-slide-inner {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .security-slide-inner--reverse {
+    direction: ltr;
+  }
+  .security-practices {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── /features page ───────────────────────────────────────────────────────── */
+
+/* Features hero eyebrow */
+.features-hero-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--purple-bright);
+  margin: 0 0 20px;
+}
+
+/* Floating ambient pill cards */
+.features-hero {
+  overflow: hidden;
+}
+
+.features-floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.floater {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(8px);
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+  animation: float-y 6s ease-in-out infinite;
+}
+
+/* Stagger and position each floater */
+.floater-1 { top: 18%; left:  6%; animation-delay: 0s;    animation-duration: 7s; }
+.floater-2 { top: 22%; right: 8%; animation-delay: 1.2s;  animation-duration: 6s; }
+.floater-3 { top: 55%; left:  4%; animation-delay: 0.6s;  animation-duration: 8s; }
+.floater-4 { top: 62%; right: 6%; animation-delay: 1.8s;  animation-duration: 6.5s; }
+.floater-5 { top: 38%; left: 10%; animation-delay: 2.4s;  animation-duration: 7.5s; }
+.floater-6 { top: 42%; right:10%; animation-delay: 0.9s;  animation-duration: 7s; }
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0px);  opacity: 0.6; }
+  50%       { transform: translateY(-12px); opacity: 1;   }
+}
+
+/* Hide floaters on small screens — too cluttered */
+@media (max-width: 768px) {
+  .features-floaters { display: none; }
+}
 
 /* Scrolling ticker */
 .features-ticker-wrap {
@@ -2240,6 +2563,11 @@ button {
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 16px;
   overflow: hidden;
+}
+
+/* AnimateIn wrapper inside grid must stretch to fill cell */
+.features-grid > div {
+  display: contents;
 }
 
 /* Individual feature card — Replit faded style */

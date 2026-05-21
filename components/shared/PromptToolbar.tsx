@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowRight, Github, Mic, Paperclip, SlidersHorizontal } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { ModelPicker } from "@/components/shared/ModelPicker";
 import { toast } from "@/lib/toast";
 import type { AIModel } from "@/lib/mock/data";
@@ -25,9 +24,7 @@ export function PromptToolbar({ model, models, onModelChange, onSend, canSend }:
         <button aria-label="Connect GitHub" className="icon-btn" onClick={() => toast("Connect GitHub in Settings → Integrations")} title="Connect GitHub" type="button">
           <Github size={18} />
         </button>
-        <Badge variant="secondary">E-1</Badge>
         <ModelPicker model={model} models={models} onChange={onModelChange} />
-        <Badge variant="secondary">Maxx off</Badge>
       </div>
       <div className="toolbar-right">
         <button aria-label="Prompt settings" className="icon-btn" onClick={() => toast("Prompt settings — coming soon")} title="Prompt settings" type="button">

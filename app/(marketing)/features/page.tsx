@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "@/components/marketing/Navbar";
 import { Footer } from "@/components/shared/Footer";
+import { AnimateIn } from "@/components/shared/AnimateIn";
 
 export const metadata: Metadata = {
   title: "Features — SpringBloom",
@@ -93,22 +94,39 @@ export default function FeaturesPage() {
     <main className="page-shell">
       <Navbar />
 
-      {/* ── Hero ── */}
-      <section className="hero">
-        <div className="container text-center">
-          <h1>
-            Features for<br className="hidden md:block" /> every stage of your build.
-          </h1>
-          <p className="hero-copy mx-auto max-w-xl">
-            Agent SP 1 supports every layer of a production app — automatically enabled
-            based on what you ask for.
-          </p>
-          <a
-            className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90"
-            href="/"
-          >
-            Start building free →
-          </a>
+      {/* ── Hero with floating cards ── */}
+      <section className="hero features-hero">
+        <div className="container text-center" style={{ position: "relative", zIndex: 1 }}>
+          <AnimateIn from="fade">
+            <p className="features-hero-eyebrow">All features</p>
+          </AnimateIn>
+          <AnimateIn from="bottom" delay={60}>
+            <h1>
+              Everything to go<br className="hidden md:block" /> from idea to shipped.
+            </h1>
+          </AnimateIn>
+          <AnimateIn from="bottom" delay={140}>
+            <p className="hero-copy mx-auto max-w-xl">
+              Agent SP 1 supports every layer of a production app — code generation,
+              security, review, analytics, and deployment.
+            </p>
+            <a
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-6 py-3 font-semibold text-white transition-opacity hover:opacity-90"
+              href="/"
+            >
+              Start building free →
+            </a>
+          </AnimateIn>
+        </div>
+
+        {/* Floating ambient cards — CSS animation, no JS */}
+        <div className="features-floaters" aria-hidden>
+          <div className="floater floater-1"><Sparkles size={16} /><span>AI Generation</span></div>
+          <div className="floater floater-2"><ShieldCheck size={16} /><span>Security scan</span></div>
+          <div className="floater floater-3"><Zap size={16} /><span>Live preview</span></div>
+          <div className="floater floater-4"><CheckCircle2 size={16} /><span>Code review</span></div>
+          <div className="floater floater-5"><GitBranch size={16} /><span>GitHub export</span></div>
+          <div className="floater floater-6"><BarChart3 size={16} /><span>Analytics</span></div>
         </div>
       </section>
 
@@ -131,21 +149,23 @@ export default function FeaturesPage() {
       <div className="container py-20 space-y-20">
         {SECTIONS.map(({ label, cards }) => (
           <section key={label}>
-            {/* Section label — plain, like Replit */}
-            <h2 className="features-section-label">{label}</h2>
+            <AnimateIn from="bottom">
+              <h2 className="features-section-label">{label}</h2>
+            </AnimateIn>
 
-            {/* 2-column card grid */}
             <div className="features-grid">
-              {cards.map(({ icon: Icon, title, body }) => (
-                <article className="features-card" key={title}>
-                  <div className="features-card-header">
-                    <span className="features-icon-box">
-                      <Icon size={18} />
-                    </span>
-                    <h3 className="features-card-title">{title}</h3>
-                  </div>
-                  <p className="features-card-body">{body}</p>
-                </article>
+              {cards.map(({ icon: Icon, title, body }, ci) => (
+                <AnimateIn from="bottom" delay={ci * 60} key={title}>
+                  <article className="features-card">
+                    <div className="features-card-header">
+                      <span className="features-icon-box">
+                        <Icon size={18} />
+                      </span>
+                      <h3 className="features-card-title">{title}</h3>
+                    </div>
+                    <p className="features-card-body">{body}</p>
+                  </article>
+                </AnimateIn>
               ))}
             </div>
           </section>
