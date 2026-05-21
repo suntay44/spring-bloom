@@ -20,7 +20,6 @@ export function Navbar() {
           <a href="/security">Security</a>
         </nav>
         <div className="flex items-center gap-3">
-          <Button onClick={() => setAuthOpen(true)} type="button" variant="outline">Login</Button>
           <Button onClick={() => setAuthOpen(true)} type="button">Start Building <ArrowRight size={17} /></Button>
         </div>
       </div>

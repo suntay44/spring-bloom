@@ -1,22 +1,22 @@
 import type { Metadata } from "next";
-import { Stint_Ultra_Expanded, Pontano_Sans } from "next/font/google";
+import { Space_Grotesk, DM_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
-// Display / heading font — used for h1, h2, h3
-const stintUltraExpanded = Stint_Ultra_Expanded({
-  weight: "400",          // only weight available for this face
+// Heading font — modern geometric with personality
+const spaceGrotesk = Space_Grotesk({
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
-  variable: "--font-stint",
+  variable: "--font-space",
   display: "swap",
   preload: true,
 });
 
-// Body / UI font — clean geometric sans-serif
-const pontanoSans = Pontano_Sans({
-  weight: "400",          // only weight available for this face
+// Body / UI font — clean, highly legible at small sizes
+const dmSans = DM_Sans({
+  weight: ["300", "400", "500", "600", "700"],
   subsets: ["latin"],
-  variable: "--font-pontano",
+  variable: "--font-dm",
   display: "swap",
   preload: true,
 });
@@ -36,7 +36,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${stintUltraExpanded.variable} ${pontanoSans.variable}`}
+      className={`${spaceGrotesk.variable} ${dmSans.variable}`}
     >
       <body>
         {children}
