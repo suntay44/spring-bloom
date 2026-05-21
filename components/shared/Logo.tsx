@@ -1,12 +1,12 @@
-import { Layers3 } from "lucide-react";
+import Image from "next/image";
 
 export function Logo() {
   return (
-    <span className="logo" aria-label="Wild Cupcake">
-      <span className="logo-mark">
-        <Layers3 size={19} />
+    <span className="logo" aria-label="SpringBloom">
+      <span className="logo-mark" style={{ background: "transparent", padding: 0 }}>
+        <Image src="/logos/SpringBloom-Icon-1x1.png" alt="SpringBloom icon" width={24} height={24} priority />
       </span>
-      <span>Wild Cupcake</span>
+      <span>SpringBloom</span>
     </span>
   );
 }

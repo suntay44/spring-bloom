@@ -15,9 +15,9 @@ export function Navbar() {
       <div className="container nav-inner">
         <Link href="/"><Logo /></Link>
         <nav className="hidden items-center gap-7 text-sm font-bold text-slate-300 md:flex">
-          <a href="/#features">Features</a>
+          <a href="/features">Features</a>
           <a href="/pricing">Pricing</a>
-          <a href="/#workflow">Workflow</a>
+          <a href="/security">Security</a>
         </nav>
         <div className="flex items-center gap-3">
           <Button onClick={() => setAuthOpen(true)} type="button" variant="outline">Login</Button>

@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
 import { HeroCTAButtons } from "@/components/marketing/HeroCTAButtons";
@@ -11,15 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { DEVELOPER_FEATURES, MARKETING_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
 
 const HERO_STATS = [
-  { title: "Plan", body: "5-question brief before code" },
-  { title: "Build", body: "chat left, preview right" },
-  { title: "Trust", body: "review, security, analytics" },
+  { title: "Plan", body: "Brief before code — scope, stack, cost estimate." },
+  { title: "Build", body: "Chat on the left. Live preview on the right." },
+  { title: "Ship", body: "Review, security scan, analytics from day one." },
 ] as const;
 
 const WORKFLOW_STEPS = [
-  { step: "1", title: "Describe your app", body: "Choose full-stack, mobile, or landing page and write the first idea." },
-  { step: "2", title: "Answer five questions", body: "Clarify product goal, frontend, backend, screens, and constraints." },
-  { step: "3", title: "Approve the PRD", body: "See scope, backend choice, model, and credit estimate before building." },
+  { step: "1", title: "Describe", body: "Choose full-stack web, mobile, or landing page. Write your first idea in plain English." },
+  { step: "2", title: "Brief", body: "SpringBloom confirms your goal, stack, screens, and cost estimate — before writing a single line." },
+  { step: "3", title: "Build", body: "Approve the scope and let Agent SP 1 generate, review, and iterate with you in real time." },
 ] as const;
 
 const FEATURE_HIGHLIGHTS = ["Code review built in", "Security scans", "Analytics from day one"] as const;
@@ -54,13 +54,10 @@ export default async function RootPage() {
       <Navbar />
       <section className="hero">
         <div className="container">
-          <div className="mx-auto mb-5 flex w-fit items-center gap-2 rounded-md border border-purple-500/30 bg-zinc-950/50 px-3 py-2 text-sm font-semibold text-white backdrop-blur">
-            <Bot size={18} /> Programmer-centric AI app builder
-          </div>
           <h1>Build apps in plain English.</h1>
           <p className="hero-copy">
-            Describe what you want. Confirm the project brief. Wild Cupcake generates web and mobile apps with real
-            code, review, security, analytics, and credit receipts.
+            Describe what you want. Confirm the project brief. SpringBloom generates production-ready web and mobile apps
+            with real code, built-in review, security scanning, and credit receipts.
           </p>
           <HeroCTAButtons />
           <div className="mx-auto mb-6 flex flex-wrap justify-center gap-8 text-sm font-bold text-slate-400">
@@ -82,10 +79,9 @@ export default async function RootPage() {
 
       <section className="section" id="workflow">
         <div className="container">
-          <h2>Prompt, brief, approve, build.</h2>
+          <h2>From idea to shipped — in three steps.</h2>
           <p className="section-lede">
-            The first prompt starts discovery, not coding. Every new project gets a 5-question brief and a simple PRD
-            before the agent spends credits on generation.
+            Every project starts with a brief, not a blank canvas. Agent SP 1 scopes your build before spending a single credit on generation.
           </p>
           <div className="mt-8 grid-3">
             {WORKFLOW_STEPS.map(({ step, title, body }) => (
@@ -127,6 +123,90 @@ export default async function RootPage() {
         </div>
       </section>
 
+      {/* ── Meet Agent SP 1 ── */}
+      <section className="section" id="agent">
+        <div className="container">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="mb-4 text-sm font-bold uppercase tracking-widest text-purple-400">Introducing</p>
+            <h2 className="text-4xl font-bold md:text-5xl">Meet Agent SP&nbsp;1</h2>
+            <p className="section-lede mt-4">
+              SpringBloom's first AI agent isn't a chatbot — it's a senior developer that briefs, builds, reviews, and
+              ships alongside you. It reads your intent, not just your words.
+            </p>
+          </div>
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
+            {[
+              {
+                icon: "🧠",
+                title: "Understands intent",
+                body: "Agent SP 1 asks five scoping questions before touching code — so the first generation is already close to what you want.",
+              },
+              {
+                icon: "🔁",
+                title: "Iterates with you",
+                body: "Chat on the left, live preview on the right. Every change is applied instantly, diffed, and reviewable.",
+              },
+              {
+                icon: "🔒",
+                title: "Ships safely",
+                body: "Built-in security scanning, dependency checks, and RLS validation happen before every deploy — not after.",
+              },
+            ].map(({ icon, title, body }) => (
+              <div className="card feature-card" key={title}>
+                <span className="text-3xl">{icon}</span>
+                <h3 className="mt-5 text-xl font-semibold">{title}</h3>
+                <p className="mt-3 text-slate-300">{body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-10 overflow-hidden rounded-xl border border-purple-900/40 bg-zinc-950">
+            <div className="flex items-center gap-2 border-b border-zinc-800 px-5 py-3">
+              <span className="h-3 w-3 rounded-full bg-red-500/70" />
+              <span className="h-3 w-3 rounded-full bg-yellow-500/70" />
+              <span className="h-3 w-3 rounded-full bg-green-500/70" />
+              <span className="ml-3 text-xs font-semibold text-zinc-500">Agent SP 1 · Task Manager Pro</span>
+            </div>
+            <div className="grid md:grid-cols-2">
+              <div className="border-r border-zinc-800 p-6">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">Chat</p>
+                {[
+                  { role: "user", msg: "Build me a task manager with drag-and-drop and team assignments." },
+                  { role: "agent", msg: "Scoped. Stack: Next.js + Supabase + @dnd-kit. 3 screens: Board, Team, Settings. Est. 42 credits. Approve?" },
+                  { role: "user", msg: "Yes, go." },
+                  { role: "agent", msg: "Generating board layout with Kanban columns, drag handles, and task cards… done. Preview is live." },
+                ].map(({ role, msg }, i) => (
+                  <div className={`mb-3 flex gap-3 ${role === "user" ? "justify-end" : ""}`} key={i}>
+                    {role === "agent" && <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-600 text-xs font-bold">SP</span>}
+                    <p className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${role === "user" ? "bg-purple-600 text-white" : "bg-zinc-800 text-slate-200"}`}>{msg}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="p-6">
+                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">Preview</p>
+                <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold">Task Manager Pro</p>
+                    <span className="rounded-md bg-green-900/40 px-2 py-0.5 text-xs font-bold text-green-400">Live</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["Todo", "In Progress", "Done"].map((col) => (
+                      <div className="rounded-md bg-zinc-800 p-2" key={col}>
+                        <p className="mb-2 text-xs font-bold text-zinc-400">{col}</p>
+                        <div className="space-y-1.5">
+                          {[1, 2].map((n) => (
+                            <div className="rounded bg-zinc-700 px-2 py-1.5 text-xs" key={n}>Task {n}</div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="section border-t border-zinc-800/60 bg-zinc-950">
         <div className="container">
           <h2>Everything a serious builder needs.</h2>
@@ -143,7 +223,7 @@ export default async function RootPage() {
 
       <section className="section">
         <div className="container">
-          <h2>Builders trust Wild Cupcake.</h2>
+          <h2>Builders trust SpringBloom.</h2>
           <div className="mt-8 grid-3">
             {MOCK_TESTIMONIALS.map((testimonial) => (
               <article className="card feature-card" key={testimonial.name}>
