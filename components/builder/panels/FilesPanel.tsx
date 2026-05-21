@@ -1,8 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { FileText, Loader2 } from "lucide-react";
-import { CodeEditor } from "@/components/builder/CodeEditor";
+
+const CodeEditor = dynamic(
+  () => import("@/components/builder/CodeEditor").then((m) => m.CodeEditor),
+  {
+    ssr: false,
+    loading: () => <div style={{ height: "100%", minHeight: 400, background: "#282c34" }} />,
+  }
+);
 
 export function FilesPanel({ machineId }: { machineId: string | null }) {
   const [files, setFiles] = useState<string[]>([]);
