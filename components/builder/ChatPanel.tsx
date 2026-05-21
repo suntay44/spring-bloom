@@ -367,7 +367,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         </div>
       </div>
       <div
-        className={`agent-composer ${isDragOver ? 'ring-2 ring-purple-400/60' : ''}`}
+        className={`agent-composer focus-within:ring-1 focus-within:ring-[var(--accent-cyan)]/30 ${isDragOver ? 'ring-2 ring-purple-400/60' : ''} ${isStreaming ? 'animate-pulse [box-shadow:0_0_0_1px_var(--accent-cyan)]' : ''}`}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}

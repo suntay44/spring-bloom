@@ -11,6 +11,7 @@
 import { enhanceWebPrompt } from './web-enhancer'
 import { enhanceMobilePrompt } from './mobile-enhancer'
 import { lookupTemplate } from '@/lib/library/template-lookup'
+import { matchDesignSystem, type DesignSystem } from '@/lib/library/design-matcher'
 
 export interface EnhancerContext {
   framework: string
@@ -44,11 +45,35 @@ export async function enhancePrompt(
     console.info(`[prompt-enhancer] Matched template: ${templateName}`)
   }
 
-  if (isMobile) {
-    return enhanceMobilePrompt(userPrompt, context, scaffoldContext)
+  // Match a design system (colors / style / typography) from the vendored data
+  let designSystemContext = ''
+  try {
+    const ds = matchDesignSystem(userPrompt)
+    if (ds) {
+      console.info(`[prompt-enhancer] Matched design system: ${ds.productType}`)
+      designSystemContext = formatDesignSystemBlock(ds)
+    }
+  } catch (err) {
+    console.error('[prompt-enhancer] design-matcher failed:', err)
   }
 
-  return enhanceWebPrompt(userPrompt, context, scaffoldContext)
+  if (isMobile) {
+    return enhanceMobilePrompt(userPrompt, context, scaffoldContext, designSystemContext)
+  }
+
+  return enhanceWebPrompt(userPrompt, context, scaffoldContext, designSystemContext)
+}
+
+/** Compact (~150 token) design system block injected into the enhancer prompt. */
+function formatDesignSystemBlock(ds: DesignSystem): string {
+  const c = ds.colors
+  return [
+    `DESIGN SYSTEM (matched: ${ds.productType}):`,
+    `Colors → primary: ${c.primary}, secondary: ${c.secondary}, accent: ${c.accent}, bg: ${c.background}`,
+    `Style → ${ds.style.name}`,
+    `Font → Heading: ${ds.typography.heading}, Body: ${ds.typography.body}`,
+    `UX rule → ${ds.keyConsiderations}`,
+  ].join('\n')
 }
 
 /** Heuristic: short imperative commands on existing UI don't need expansion. */

@@ -149,7 +149,7 @@ export default async function RootPage() {
               <article className="card feature-card" key={testimonial.name}>
                 <p className="leading-7 text-slate-300">&ldquo;{testimonial.text}&rdquo;</p>
                 <div className="mt-5 flex items-center gap-3">
-                  <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-full bg-purple-700 text-sm font-bold text-white">{testimonial.initials}</span>
+                  <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--primary)] text-sm font-bold text-white">{testimonial.initials}</span>
                   <div>
                     <p className="font-semibold">{testimonial.name}</p>
                     <p className="text-sm font-bold text-slate-500">{testimonial.role} · {testimonial.company}</p>

@@ -96,6 +96,36 @@ function briefContext(ctx: ProjectContext): string {
       .map(([q, a]) => `  ${q}: ${String(a)}`)
       .join('\n')
     parts.push(`PROJECT BRIEF (user-answered onboarding questions):\n${formatted}`)
+
+    // Bucket 2F: bake matched design tokens as hard constraints when present.
+    const dt = (ctx.briefAnswers as Record<string, unknown>)['design_tokens']
+    if (dt && typeof dt === 'object') {
+      const tokens = dt as {
+        colors?: Record<string, string>
+        typography?: { heading?: string; body?: string }
+        style?: { name?: string; philosophy?: string }
+      }
+      const colorLine = tokens.colors
+        ? Object.entries(tokens.colors)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(', ')
+        : ''
+      const fontLine = tokens.typography
+        ? `Heading: ${tokens.typography.heading ?? ''}, Body: ${tokens.typography.body ?? ''}`
+        : ''
+      const styleLine = tokens.style
+        ? `${tokens.style.name ?? ''}${tokens.style.philosophy ? ` — ${tokens.style.philosophy}` : ''}`
+        : ''
+      const constraintLines = [
+        'DESIGN CONSTRAINTS (the user has chosen these — use them exactly, do not invent alternatives):',
+        colorLine ? `Use these exact colors: ${colorLine}` : '',
+        fontLine ? `Use these exact fonts: ${fontLine}` : '',
+        styleLine ? `Follow this UI style philosophy: ${styleLine}` : '',
+      ].filter(Boolean)
+      if (constraintLines.length > 1) {
+        parts.push(constraintLines.join('\n'))
+      }
+    }
   }
 
   if (parts.length === 0) return ''
