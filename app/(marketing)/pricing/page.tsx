@@ -36,7 +36,7 @@ const FAQ = [
   },
   {
     q: "Do unused credits roll over?",
-    a: "Yes. Unused credits carry forward month to month for as long as your plan is active. They don't expire.",
+    a: "Yes. Unused credits carry forward month to month for as long as your plan is active. They never expire and there's no cap on how many you can accumulate — save credits from a quiet month and spend them when you're building intensely.",
   },
   {
     q: "What happens when I run out of credits?",
@@ -48,7 +48,7 @@ const FAQ = [
   },
   {
     q: "Is there a limit on projects?",
-    a: "Free accounts get 1 active project. Starter gets 3, Pro gets unlimited, and Team gets unlimited with shared access.",
+    a: "Free accounts get 1 active project. Starter gets 3, and Pro gets unlimited. You can archive projects at any time — archived projects don't count toward your limit.",
   },
   {
     q: "Can I switch plans anytime?",

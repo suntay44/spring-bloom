@@ -12,6 +12,7 @@ import { FindingsPanel } from "@/components/builder/panels/FindingsPanel";
 import { IntegrationsPanel } from "@/components/builder/panels/IntegrationsPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
 import { PublishModal } from "@/components/builder/PublishModal";
+import { UpgradeModal } from "@/components/builder/UpgradeModal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -71,6 +72,9 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
   const [viewMode, setViewMode] = useState<ViewMode>("desktop");
   const [currentRoute, setCurrentRoute] = useState("/");
   const [routePickerOpen, setRoutePickerOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  // In production, derive from user profile: plan === "free"
+  const isFreePlan = true;
   const machine = useMachineProvisioner(project.id, machineId);
   const TAB_PANELS: Record<BuilderTab, () => ReactNode> = {
     Preview:      () => <PreviewPanel machineId={machine.machineId} project={project} provisioning={machine.provisioning} />,
@@ -202,15 +206,16 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
           </Tooltip>
           <TooltipButton ariaLabel="Connect GitHub" label="GitHub" onClick={() => toast("Connect GitHub in Settings → Integrations")}><Github size={17} /></TooltipButton>
           <Tooltip>
-            <TooltipTrigger render={<Button onClick={() => setPublishOpen(true)} type="button" variant="default" />}>
+            <TooltipTrigger render={<Button onClick={() => isFreePlan ? setUpgradeOpen(true) : setPublishOpen(true)} type="button" variant="default" />}>
               <Upload size={16} /> Publish
             </TooltipTrigger>
-            <TooltipContent>Publish</TooltipContent>
+            <TooltipContent>{isFreePlan ? "Upgrade to publish" : "Publish"}</TooltipContent>
           </Tooltip>
         </div>
       </header>
 
       <PublishModal open={publishOpen} onOpenChange={setPublishOpen} projectId={project.id} />
+      {upgradeOpen && <UpgradeModal feature="Publish to live URL" requiredPlan="Starter" onClose={() => setUpgradeOpen(false)} />}
 
       <main className="builder-workspace">
         {!sidebarCollapsed ? <ChatPanel initialMessages={initialMessages} machineId={machine.machineId} projectId={project.id} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} onVisualEditsToggle={toggleVisualEdits} visualEdits={visualEdits} /> : null}

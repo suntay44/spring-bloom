@@ -7,21 +7,21 @@ import { Footer } from "@/components/shared/Footer";
 import { NewProjectClient } from "@/components/new-project/NewProjectClient";
 import { AnimateIn } from "@/components/shared/AnimateIn";
 import { DEVELOPER_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, GitBranch, Lightbulb, ShieldCheck as ShieldIcon } from "lucide-react";
 
 const AGENT_CARDS = [
   {
-    icon: "🧠",
+    icon: "intent",
     title: "Understands intent",
     body: "Agent SP 1 asks five scoping questions before touching code — so the first generation is already close to what you want.",
   },
   {
-    icon: "🔁",
+    icon: "iterate",
     title: "Iterates with you",
     body: "Chat on the left, live preview on the right. Every change is applied instantly, diffed, and reviewable.",
   },
   {
-    icon: "🔒",
+    icon: "ship",
     title: "Ships safely",
     body: "Built-in security scanning, dependency checks, and RLS validation happen before every deploy — not after.",
   },
@@ -58,7 +58,7 @@ export default async function RootPage() {
 
       {/* ── Hero ── */}
       <section className="hero mesh-hero">
-        <div className="container" style={{ position: "relative", zIndex: 1, paddingTop: "80px", paddingBottom: "80px", width: "100%" }}>
+        <div className="container" style={{ position: "relative", zIndex: 1, paddingTop: "clamp(80px, 13vh, 130px)", paddingBottom: "80px", width: "100%" }}>
 
           {/* Single announcement pill — like Base44/Lovable */}
           <AnimateIn from="fade">
@@ -115,7 +115,11 @@ export default async function RootPage() {
             {AGENT_CARDS.map(({ icon, title, body }, i) => (
               <AnimateIn from="bottom" delay={i * 80} key={title}>
                 <div className="card home-agent-card">
-                  <span className="home-agent-icon">{icon}</span>
+                  <span className="home-agent-icon">
+                    {icon === "intent" && <Lightbulb size={22} />}
+                    {icon === "iterate" && <GitBranch size={22} />}
+                    {icon === "ship" && <ShieldIcon size={22} />}
+                  </span>
                   <h3 className="mt-5 text-xl">{title}</h3>
                   <p className="mt-3 text-slate-400">{body}</p>
                 </div>
@@ -230,7 +234,9 @@ export default async function RootPage() {
         </div>
       </section>
 
-      <PricingSection />
+      <div className="home-pricing-section">
+        <PricingSection />
+      </div>
       <Footer />
     </main>
   );
