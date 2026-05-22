@@ -193,7 +193,7 @@ $tpl$
     'Dark Mode Toggle Pattern (Tailwind)',
     'Dark/light theme toggle with next-themes. Class-based dark mode. Tailwind v4 compatible.',
     'tailwind',
-    array['dark-mode','theme','toggle','next-themes','tailwind','light','color-scheme'],
+    array['dark-mode','dark','light','theme','toggle','next-themes','tailwind','color-scheme'],
     $tpl$
 DARK MODE TOGGLE (next-themes + Tailwind):
 
