@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   Users, BarChart2, DollarSign, Bug, BookOpen,
   Settings2, ArrowLeft, Sprout, ShieldAlert, GitBranch,
-  Lightbulb, Cpu, TrendingUp, Workflow,
+  Lightbulb, Cpu, TrendingUp, Workflow, Newspaper,
 } from "lucide-react"
 
 type NavItem =
@@ -52,6 +52,12 @@ const SECTIONS: NavSection[] = [
     items: [
       { type: "soon", icon: Lightbulb, label: "Prompt Patterns" },
       { type: "soon", icon: Cpu,       label: "Machines"        },
+    ],
+  },
+  {
+    title: "Content",
+    items: [
+      { type: "link", href: "/backend-admin/news", icon: Newspaper, label: "News Articles" },
     ],
   },
   {

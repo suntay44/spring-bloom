@@ -252,21 +252,19 @@ button {
 }
 
 .hero h1 {
-  margin: 24px 0 16px;
+  margin: 10px 0 14px;
   color: white;
-  font-size: clamp(40px, 5.6vw, 72px);
-  line-height: 1.04;
-  text-align: center;
+  font-size: clamp(28px, 3.4vw, 46px);
+  line-height: 1.06;
   letter-spacing: -0.04em;
   font-weight: 700;
 }
 
 .hero-copy {
-  max-width: 720px;
-  margin: 0 auto 28px;
+  max-width: 680px;
+  margin: 0 auto;
   color: rgba(248, 250, 252, 0.76);
-  text-align: center;
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1.5;
 }
 
@@ -3306,7 +3304,7 @@ button {
   font-weight: 500;
   color: rgba(212, 212, 216, 0.9);
   text-decoration: none;
-  margin-bottom: 28px;
+  margin-bottom: 10px;
   transition: border-color 0.2s ease, background 0.2s ease;
   cursor: pointer;
 }
@@ -3326,6 +3324,87 @@ button {
   color: white;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+
+/* ── Hero headline block (centered) ── */
+.hero-headline-block {
+  text-align: center;
+  max-width: 680px;
+  margin: 0 auto 32px;
+}
+
+/* ── Example prompts row below the prompt card ── */
+.hero-examples {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  width: min(920px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-examples-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.28);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hero-examples-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  align-items: center;
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+}
+.hero-examples-chips::-webkit-scrollbar { display: none; }
+
+.hero-example-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+  color: rgba(248, 250, 252, 0.72);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.hero-example-chip:hover {
+  border-color: rgba(167, 139, 250, 0.38);
+  background: rgba(124, 58, 237, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.hero-example-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.hero-example-refresh:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.7);
+  transform: rotate(90deg);
 }
 
 /* ── Trust row below prompt ── */

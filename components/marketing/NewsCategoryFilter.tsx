@@ -2,14 +2,27 @@
 
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { NEWS_ARTICLES, NEWS_CATEGORIES, type NewsCategory } from "@/lib/mock/news";
+import type { NewsArticleRow } from "@/app/(marketing)/news/page";
 
-export function NewsCategoryFilter() {
+const NEWS_CATEGORIES = ["Community", "Talents", "FAQs", "Updates", "Policy"] as const;
+type NewsCategory = typeof NEWS_CATEGORIES[number];
+
+type Props = {
+  articles: NewsArticleRow[];
+};
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "long", day: "numeric", year: "numeric",
+  });
+}
+
+export function NewsCategoryFilter({ articles }: Props) {
   const [active, setActive] = useState<NewsCategory | "All">("All");
 
   const filtered = active === "All"
-    ? NEWS_ARTICLES
-    : NEWS_ARTICLES.filter((a) => a.category === active);
+    ? articles
+    : articles.filter((a) => a.category === active);
 
   return (
     <>
@@ -35,22 +48,26 @@ export function NewsCategoryFilter() {
       </div>
 
       {/* ── Article grid ── */}
-      <div className="news-grid">
-        {filtered.map((article) => (
-          <article className="news-card" key={article.id}>
-            <div
-              className="news-card-cover"
-              style={{ background: article.coverGradient }}
-              aria-hidden
-            />
-            <div className="news-card-body">
-              <span className="news-card-cat">{article.category}</span>
-              <h3 className="news-card-title">{article.title}</h3>
-              <p className="news-card-date">{article.date}</p>
-            </div>
-          </article>
-        ))}
-      </div>
+      {filtered.length === 0 ? (
+        <p className="py-12 text-center text-sm text-zinc-500">No articles in this category yet.</p>
+      ) : (
+        <div className="news-grid">
+          {filtered.map((article) => (
+            <article className="news-card" key={article.id}>
+              <div
+                aria-hidden
+                className="news-card-cover"
+                style={{ background: article.cover_gradient }}
+              />
+              <div className="news-card-body">
+                <span className="news-card-cat">{article.category}</span>
+                <h3 className="news-card-title">{article.title}</h3>
+                <p className="news-card-date">{formatDate(article.published_at)}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </>
   );
 }

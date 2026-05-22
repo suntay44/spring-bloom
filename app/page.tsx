@@ -6,24 +6,29 @@ import { HeroPromptSection } from "@/components/marketing/HeroPromptSection";
 import { Footer } from "@/components/shared/Footer";
 import { NewProjectClient } from "@/components/new-project/NewProjectClient";
 import { AnimateIn } from "@/components/shared/AnimateIn";
-import { DEVELOPER_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
-import { CheckCircle2, GitBranch, Lightbulb, ShieldCheck as ShieldIcon } from "lucide-react";
+import { DEVELOPER_FEATURES, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
+import { CheckCircle2, Layers, Lightbulb, ShieldCheck as ShieldIcon, Zap } from "lucide-react";
 
 const AGENT_CARDS = [
   {
     icon: "intent",
     title: "Understands intent",
-    body: "Agent SP 1 asks five scoping questions before touching code — so the first generation is already close to what you want.",
+    body: "Agent SP v1 asks five scoping questions before touching code — so the first generation is already close to what you want.",
   },
   {
-    icon: "iterate",
-    title: "Iterates with you",
-    body: "Chat on the left, live preview on the right. Every change is applied instantly, diffed, and reviewable.",
+    icon: "optimized",
+    title: "Optimized & Efficient",
+    body: "Every generation is token-efficient and performance-aware — clean architecture, minimal dependencies, and fast cold starts from day one.",
   },
   {
     icon: "ship",
     title: "Ships safely",
     body: "Built-in security scanning, dependency checks, and RLS validation happen before every deploy — not after.",
+  },
+  {
+    icon: "library",
+    title: "Rich UI Libraries",
+    body: "Pre-loaded with production-grade UI components — Shadcn, Radix, Tailwind — so your app looks polished on the very first generation.",
   },
 ] as const;
 
@@ -60,50 +65,35 @@ export default async function RootPage() {
       <section className="hero mesh-hero">
         <div className="container" style={{ position: "relative", zIndex: 1, paddingTop: "clamp(80px, 13vh, 130px)", paddingBottom: "80px", width: "100%" }}>
 
-          {/* Single announcement pill — like Base44/Lovable */}
-          <AnimateIn from="fade">
-            <a className="hero-announce" href="#agent">
-              <span className="hero-announce-badge">New</span>
-              Meet Agent SP 1 →
-            </a>
-          </AnimateIn>
-
-          <AnimateIn from="bottom" delay={60}>
-            <h1 className="hero-h1-oneliner">Spring: where flowers bloom.</h1>
-          </AnimateIn>
-
-          <AnimateIn from="bottom" delay={120}>
-            <p className="hero-copy mx-auto max-w-lg">
-              Web &amp; Mobile same backend, dev-centric internal tools.
-            </p>
+          {/* Pill + headline + copy — left-aligned block */}
+          <AnimateIn from="bottom">
+            <div className="hero-headline-block">
+              <a className="hero-announce" href="#agent">
+                <span className="hero-announce-badge">New</span>
+                Meet Agent SP v1 →
+              </a>
+              <h1 className="hero-h1-oneliner">Dev-Centric Scalable Builder</h1>
+              <p className="hero-copy">
+                Create Website &amp; Mobile apps with the same backend.
+              </p>
+            </div>
           </AnimateIn>
 
           {/* Prompt IS the CTA */}
-          <AnimateIn from="bottom" delay={180}>
+          <AnimateIn from="bottom" delay={100}>
             <HeroPromptSection />
-          </AnimateIn>
-
-          {/* Minimal trust row below input */}
-          <AnimateIn from="fade" delay={260}>
-            <div className="hero-trust-row">
-              <span><strong>{MOCK_STATS.builders}</strong> builders</span>
-              <span className="hero-trust-sep" />
-              <span><strong>{MOCK_STATS.appsBuilt}</strong> apps built</span>
-              <span className="hero-trust-sep" />
-              <span>⭐ {MOCK_STATS.rating} rating</span>
-            </div>
           </AnimateIn>
 
         </div>
       </section>
 
-      {/* ── Meet Agent SP 1 ── */}
+      {/* ── Meet Agent SP v1 ── */}
       <section className="section home-agent-section" id="agent">
         <div className="container">
           <AnimateIn from="bottom">
             <div className="mx-auto max-w-3xl text-center">
               <p className="home-eyebrow">Introducing</p>
-              <h2>Meet Agent SP&nbsp;1</h2>
+              <h2>Meet Agent SP&nbsp;v1</h2>
               <p className="section-lede mt-4">
                 SpringBloom's first AI agent isn't a chatbot — it's a senior developer that briefs, builds, reviews, and
                 ships alongside you. It reads your intent, not just your words.
@@ -111,14 +101,15 @@ export default async function RootPage() {
             </div>
           </AnimateIn>
 
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {AGENT_CARDS.map(({ icon, title, body }, i) => (
               <AnimateIn from="bottom" delay={i * 80} key={title}>
                 <div className="card home-agent-card">
                   <span className="home-agent-icon">
-                    {icon === "intent" && <Lightbulb size={22} />}
-                    {icon === "iterate" && <GitBranch size={22} />}
-                    {icon === "ship" && <ShieldIcon size={22} />}
+                    {icon === "intent"    && <Lightbulb size={22} />}
+                    {icon === "optimized" && <Zap size={22} />}
+                    {icon === "ship"      && <ShieldIcon size={22} />}
+                    {icon === "library"   && <Layers size={22} />}
                   </span>
                   <h3 className="mt-5 text-xl">{title}</h3>
                   <p className="mt-3 text-slate-400">{body}</p>
@@ -134,7 +125,7 @@ export default async function RootPage() {
                 <span className="home-agent-dot dot-red" />
                 <span className="home-agent-dot dot-yellow" />
                 <span className="home-agent-dot dot-green" />
-                <span className="home-agent-window-label">Agent SP 1 · Task Manager Pro</span>
+                <span className="home-agent-window-label">Agent SP v1 · Task Manager Pro</span>
               </div>
               <div className="grid md:grid-cols-2">
                 <div className="home-agent-chat">
