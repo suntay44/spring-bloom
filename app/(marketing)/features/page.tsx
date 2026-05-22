@@ -95,7 +95,7 @@ export default function FeaturesPage() {
       <Navbar />
 
       {/* ── Hero with floating cards ── */}
-      <section className="hero features-hero">
+      <section className="hero features-hero mesh-hero">
         <div className="container text-center" style={{ position: "relative", zIndex: 1 }}>
           <AnimateIn from="fade">
             <p className="features-hero-eyebrow">All features</p>

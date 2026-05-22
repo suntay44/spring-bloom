@@ -17,7 +17,7 @@ const LEGAL_LINKS = [
 ]
 
 const COMPANY_LINKS = [
-  { label: "Help", href: "/help" },
+  { label: "News", href: "/news" },
   { label: "Status", href: "https://status.springbloom.app", external: true },
   { label: "GitHub", href: "https://github.com", external: true },
 ]
@@ -53,9 +53,9 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Company */}
+          {/* Resources */}
           <div>
-            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-400">Company</p>
+            <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-400">Resources</p>
             <ul className="space-y-2.5">
               {COMPANY_LINKS.map(({ label, href, external }) => (
                 <li key={label}>

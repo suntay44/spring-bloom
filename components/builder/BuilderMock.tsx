@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { UIMessage } from "ai";
-import { ArrowUpRight, BarChart3, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, Laptop, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, ShieldCheck, Sparkles, Upload, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, BarChart3, Check, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, ShieldCheck, Smartphone, Sparkles, Upload, type LucideIcon } from "lucide-react";
 import { ChatPanel } from "@/components/builder/ChatPanel";
 import { ProjectMenu, MoreToolsMenu, type BuilderTab, type ProjectMenuUser } from "@/components/builder/ProjectMenu";
 import { AnalyticsPanel } from "@/components/builder/panels/AnalyticsPanel";
@@ -57,6 +57,10 @@ function TooltipButton({ label, ariaLabel = label, children, onClick }: { label:
   );
 }
 
+type ViewMode = "desktop" | "mobile";
+
+const PREVIEW_ROUTES = ["/", "/dashboard", "/login", "/signup", "/settings", "/pricing"];
+
 export function BuilderMock({ project, initialMessages = [], machineId, user }: BuilderMockProps) {
   const [tab, setTab] = useState<BuilderTab>("Preview");
   const [publishOpen, setPublishOpen] = useState(false);
@@ -64,6 +68,9 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [visualEdits, setVisualEdits] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("desktop");
+  const [currentRoute, setCurrentRoute] = useState("/");
+  const [routePickerOpen, setRoutePickerOpen] = useState(false);
   const machine = useMachineProvisioner(project.id, machineId);
   const TAB_PANELS: Record<BuilderTab, () => ReactNode> = {
     Preview:      () => <PreviewPanel machineId={machine.machineId} project={project} provisioning={machine.provisioning} />,
@@ -130,10 +137,58 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
         </div>
 
         <div className="preview-addressbar">
-          <div className="device-pill"><Laptop size={16} /><span>/</span></div>
-          <div className="flex items-center gap-2">
-            <TooltipButton ariaLabel="Open preview in new tab" label="Open preview" onClick={() => { window.open("/", "_blank"); toast("Opening preview in new tab..."); }}><ArrowUpRight size={16} /></TooltipButton>
-            <TooltipButton ariaLabel="Refresh preview" label="Refresh preview" onClick={() => toast("Preview refreshed")}><RefreshCw size={16} /></TooltipButton>
+          <div className="preview-url-pill">
+            <Tooltip>
+              <TooltipTrigger render={
+                <button
+                  className={`preview-device-toggle ${viewMode === "mobile" ? "active" : ""}`}
+                  onClick={() => setViewMode(viewMode === "mobile" ? "desktop" : "mobile")}
+                  type="button"
+                />
+              }>
+                <Smartphone size={14} />
+              </TooltipTrigger>
+              <TooltipContent>{viewMode === "mobile" ? "Show desktop preview" : "Show mobile preview"}</TooltipContent>
+            </Tooltip>
+
+            <button
+              className="preview-route-trigger"
+              onClick={() => setRoutePickerOpen((v) => !v)}
+              type="button"
+            >
+              {currentRoute}
+            </button>
+
+            {routePickerOpen && (
+              <div className="preview-route-dropdown">
+                {PREVIEW_ROUTES.map((route) => (
+                  <button
+                    className={`preview-route-item ${route === currentRoute ? "active" : ""}`}
+                    key={route}
+                    onClick={() => { setCurrentRoute(route); setRoutePickerOpen(false); }}
+                    type="button"
+                  >
+                    <span>{route}</span>
+                    {route === currentRoute && <Check size={13} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="preview-url-actions">
+            <Tooltip>
+              <TooltipTrigger render={<button className="tool-btn" onClick={() => { window.open("/", "_blank"); toast("Opening preview in new tab..."); }} type="button" />}>
+                <ArrowUpRight size={15} />
+              </TooltipTrigger>
+              <TooltipContent>Open preview in new tab</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger render={<button className="tool-btn" onClick={() => toast("Preview refreshed")} type="button" />}>
+                <RefreshCw size={15} />
+              </TooltipTrigger>
+              <TooltipContent>Refresh page</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -159,7 +214,7 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
 
       <main className="builder-workspace">
         {!sidebarCollapsed ? <ChatPanel initialMessages={initialMessages} machineId={machine.machineId} projectId={project.id} onTabChange={setTab} onToolsOpen={() => setToolsOpen(true)} onVisualEditsToggle={toggleVisualEdits} visualEdits={visualEdits} /> : null}
-        <section className="preview-pane">
+        <section className={`preview-pane${viewMode === "mobile" ? " view-mobile" : ""}`}>
           <div className="preview-browser">
             {TAB_PANELS[tab]()}
           </div>

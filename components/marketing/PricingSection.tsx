@@ -35,7 +35,15 @@ export function PricingSection({ expanded = false }: { expanded?: boolean }) {
         <div className="grid-4">
           {pricingPlans.map((plan) => (
             <article className={`card price-card ${plan.featured ? "featured" : ""}`} key={plan.name}>
-              <div className="mb-5"><p className="text-sm font-semibold uppercase tracking-normal text-slate-500">{plan.name}</p><h3 className="mt-2 text-4xl font-semibold">{plan.price}</h3><p className="mt-1 text-sm font-bold text-slate-500">per month</p></div>
+              <div className="mb-5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold uppercase tracking-normal text-slate-500">{plan.name}</p>
+                  {plan.featured && (
+                    <span className="price-popular-badge">Popular</span>
+                  )}
+                </div>
+                <h3 className="mt-2 text-4xl font-semibold">{plan.price}</h3><p className="mt-1 text-sm font-bold text-slate-500">per month</p>
+              </div>
               <div className="mb-6 space-y-3 text-sm font-bold text-slate-300">
                 <p className="flex items-center gap-2"><CheckCircle2 color="var(--green)" size={17} /> {plan.credits}</p>
                 <p className="flex items-center gap-2"><CheckCircle2 color="var(--green)" size={17} /> {plan.projects}</p>

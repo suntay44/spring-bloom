@@ -1,4 +1,5 @@
 import { ArtifactCard } from "./ArtifactCard";
+import { ScopingQuestionsCard } from "./ScopingQuestionsCard";
 import type { UIMessage } from "ai";
 import { extractPreamble, hasArtifact, parseArtifacts } from "@/lib/ai/artifact-parser";
 import type { MockMessage } from "@/lib/mock/messages";
@@ -18,6 +19,16 @@ export function MessageItem({ message }: { message: MessageItemMessage }) {
 
   if (message.role === "user") {
     return <div className="user-bubble">{content}</div>;
+  }
+
+  // Scoping questions card (Emergent-style structured Q&A)
+  if ("questions" in message && message.questions && message.questions.length > 0) {
+    return (
+      <ScopingQuestionsCard
+        content={content}
+        questions={message.questions}
+      />
+    );
   }
 
   const artifacts = "artifacts" in message ? message.artifacts : parseArtifacts(content);

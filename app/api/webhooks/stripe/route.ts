@@ -213,5 +213,5 @@ function resolvePlanFromSubscription(sub: Stripe.Subscription): SubscriptionPlan
   return undefined
 }
 
-// Required: disable body parsing so stripe-signature verification works
-export const config = { api: { bodyParser: false } }
+// Body parsing is handled by reading req.body as raw bytes in the handler above.
+// (The App Router does not use the Pages Router config export.)

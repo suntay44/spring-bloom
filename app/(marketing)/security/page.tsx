@@ -84,7 +84,7 @@ export default function SecurityPage() {
       <Navbar />
 
       {/* ── Hero ── */}
-      <section className="security-hero">
+      <section className="security-hero mesh-hero">
         <div className="container">
           <AnimateIn from="fade">
             <div className="security-hero-badge">

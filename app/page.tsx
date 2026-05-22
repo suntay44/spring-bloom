@@ -1,17 +1,30 @@
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/AppShell";
-import { HeroCTAButtons } from "@/components/marketing/HeroCTAButtons";
 import { Navbar } from "@/components/marketing/Navbar";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { HeroPromptSection } from "@/components/marketing/HeroPromptSection";
 import { Footer } from "@/components/shared/Footer";
 import { NewProjectClient } from "@/components/new-project/NewProjectClient";
+import { AnimateIn } from "@/components/shared/AnimateIn";
 import { DEVELOPER_FEATURES, MOCK_STATS, MOCK_TESTIMONIALS } from "@/lib/mock/marketing";
+import { CheckCircle2 } from "lucide-react";
 
-const HERO_STATS = [
-  { title: "Plan", body: "Brief before code — scope, stack, cost estimate." },
-  { title: "Build", body: "Chat on the left. Live preview on the right." },
-  { title: "Ship", body: "Review, security scan, analytics from day one." },
+const AGENT_CARDS = [
+  {
+    icon: "🧠",
+    title: "Understands intent",
+    body: "Agent SP 1 asks five scoping questions before touching code — so the first generation is already close to what you want.",
+  },
+  {
+    icon: "🔁",
+    title: "Iterates with you",
+    body: "Chat on the left, live preview on the right. Every change is applied instantly, diffed, and reviewable.",
+  },
+  {
+    icon: "🔒",
+    title: "Ships safely",
+    body: "Built-in security scanning, dependency checks, and RLS validation happen before every deploy — not after.",
+  },
 ] as const;
 
 export default async function RootPage() {
@@ -42,144 +55,176 @@ export default async function RootPage() {
   return (
     <main className="page-shell">
       <Navbar />
-      <section className="hero">
-        <div className="container">
-          <h1>Build apps in plain English.</h1>
-          <p className="hero-copy">
-            Describe what you want. Confirm the project brief. SpringBloom generates production-ready web and mobile apps
-            with real code, built-in review, security scanning, and credit receipts.
-          </p>
-          <HeroCTAButtons />
-          <div className="mx-auto mb-6 flex flex-wrap justify-center gap-8 text-sm font-bold text-slate-400">
-            <span><strong className="text-white">{MOCK_STATS.builders}</strong> builders</span>
-            <span><strong className="text-white">{MOCK_STATS.appsBuilt}</strong> apps built</span>
-            <span><strong className="text-white">{MOCK_STATS.rating}</strong> rating</span>
-          </div>
-          <HeroPromptSection />
-          <div className="mx-auto mt-6 grid max-w-4xl grid-cols-3 gap-3">
-            {HERO_STATS.map(({ title, body }) => (
-              <div className="card px-4 py-3" key={title}>
-                <p className="text-sm font-semibold">{title}</p>
-                <p className="mt-1 text-xs font-semibold text-slate-500">{body}</p>
-              </div>
-            ))}
-          </div>
+
+      {/* ── Hero ── */}
+      <section className="hero mesh-hero">
+        <div className="container" style={{ position: "relative", zIndex: 1, paddingTop: "80px", paddingBottom: "80px", width: "100%" }}>
+
+          {/* Single announcement pill — like Base44/Lovable */}
+          <AnimateIn from="fade">
+            <a className="hero-announce" href="#agent">
+              <span className="hero-announce-badge">New</span>
+              Meet Agent SP 1 →
+            </a>
+          </AnimateIn>
+
+          <AnimateIn from="bottom" delay={60}>
+            <h1 className="hero-h1-oneliner">Spring: where flowers bloom.</h1>
+          </AnimateIn>
+
+          <AnimateIn from="bottom" delay={120}>
+            <p className="hero-copy mx-auto max-w-lg">
+              Web &amp; Mobile same backend, dev-centric internal tools.
+            </p>
+          </AnimateIn>
+
+          {/* Prompt IS the CTA */}
+          <AnimateIn from="bottom" delay={180}>
+            <HeroPromptSection />
+          </AnimateIn>
+
+          {/* Minimal trust row below input */}
+          <AnimateIn from="fade" delay={260}>
+            <div className="hero-trust-row">
+              <span><strong>{MOCK_STATS.builders}</strong> builders</span>
+              <span className="hero-trust-sep" />
+              <span><strong>{MOCK_STATS.appsBuilt}</strong> apps built</span>
+              <span className="hero-trust-sep" />
+              <span>⭐ {MOCK_STATS.rating} rating</span>
+            </div>
+          </AnimateIn>
+
         </div>
       </section>
 
       {/* ── Meet Agent SP 1 ── */}
-      <section className="section" id="agent">
+      <section className="section home-agent-section" id="agent">
         <div className="container">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="mb-4 text-sm font-bold uppercase tracking-widest text-purple-400">Introducing</p>
-            <h2 className="text-4xl md:text-5xl">Meet Agent SP&nbsp;1</h2>
-            <p className="section-lede mt-4">
-              SpringBloom's first AI agent isn't a chatbot — it's a senior developer that briefs, builds, reviews, and
-              ships alongside you. It reads your intent, not just your words.
-            </p>
-          </div>
+          <AnimateIn from="bottom">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="home-eyebrow">Introducing</p>
+              <h2>Meet Agent SP&nbsp;1</h2>
+              <p className="section-lede mt-4">
+                SpringBloom's first AI agent isn't a chatbot — it's a senior developer that briefs, builds, reviews, and
+                ships alongside you. It reads your intent, not just your words.
+              </p>
+            </div>
+          </AnimateIn>
+
           <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {[
-              {
-                icon: "🧠",
-                title: "Understands intent",
-                body: "Agent SP 1 asks five scoping questions before touching code — so the first generation is already close to what you want.",
-              },
-              {
-                icon: "🔁",
-                title: "Iterates with you",
-                body: "Chat on the left, live preview on the right. Every change is applied instantly, diffed, and reviewable.",
-              },
-              {
-                icon: "🔒",
-                title: "Ships safely",
-                body: "Built-in security scanning, dependency checks, and RLS validation happen before every deploy — not after.",
-              },
-            ].map(({ icon, title, body }) => (
-              <div className="card feature-card" key={title}>
-                <span className="text-3xl">{icon}</span>
-                <h3 className="mt-5 text-xl">{title}</h3>
-                <p className="mt-3 text-slate-300">{body}</p>
-              </div>
+            {AGENT_CARDS.map(({ icon, title, body }, i) => (
+              <AnimateIn from="bottom" delay={i * 80} key={title}>
+                <div className="card home-agent-card">
+                  <span className="home-agent-icon">{icon}</span>
+                  <h3 className="mt-5 text-xl">{title}</h3>
+                  <p className="mt-3 text-slate-400">{body}</p>
+                </div>
+              </AnimateIn>
             ))}
           </div>
-          <div className="mt-10 overflow-hidden rounded-xl border border-purple-900/40 bg-zinc-950">
-            <div className="flex items-center gap-2 border-b border-zinc-800 px-5 py-3">
-              <span className="h-3 w-3 rounded-full bg-red-500/70" />
-              <span className="h-3 w-3 rounded-full bg-yellow-500/70" />
-              <span className="h-3 w-3 rounded-full bg-green-500/70" />
-              <span className="ml-3 text-xs font-semibold text-zinc-500">Agent SP 1 · Task Manager Pro</span>
-            </div>
-            <div className="grid md:grid-cols-2">
-              <div className="border-r border-zinc-800 p-6">
-                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">Chat</p>
-                {[
-                  { role: "user", msg: "Build me a task manager with drag-and-drop and team assignments." },
-                  { role: "agent", msg: "Scoped. Stack: Next.js + Supabase + @dnd-kit. 3 screens: Board, Team, Settings. Est. 42 credits. Approve?" },
-                  { role: "user", msg: "Yes, go." },
-                  { role: "agent", msg: "Generating board layout with Kanban columns, drag handles, and task cards… done. Preview is live." },
-                ].map(({ role, msg }, i) => (
-                  <div className={`mb-3 flex gap-3 ${role === "user" ? "justify-end" : ""}`} key={i}>
-                    {role === "agent" && <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-600 text-xs font-bold">SP</span>}
-                    <p className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${role === "user" ? "bg-purple-600 text-white" : "bg-zinc-800 text-slate-200"}`}>{msg}</p>
-                  </div>
-                ))}
+
+          {/* Agent demo window */}
+          <AnimateIn from="bottom" delay={120}>
+            <div className="mt-10 home-agent-window">
+              <div className="home-agent-window-bar">
+                <span className="home-agent-dot dot-red" />
+                <span className="home-agent-dot dot-yellow" />
+                <span className="home-agent-dot dot-green" />
+                <span className="home-agent-window-label">Agent SP 1 · Task Manager Pro</span>
               </div>
-              <div className="p-6">
-                <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-zinc-500">Preview</p>
-                <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold">Task Manager Pro</p>
-                    <span className="rounded-md bg-green-900/40 px-2 py-0.5 text-xs font-bold text-green-400">Live</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {["Todo", "In Progress", "Done"].map((col) => (
-                      <div className="rounded-md bg-zinc-800 p-2" key={col}>
-                        <p className="mb-2 text-xs font-bold text-zinc-400">{col}</p>
-                        <div className="space-y-1.5">
-                          {[1, 2].map((n) => (
-                            <div className="rounded bg-zinc-700 px-2 py-1.5 text-xs" key={n}>Task {n}</div>
-                          ))}
+              <div className="grid md:grid-cols-2">
+                <div className="home-agent-chat">
+                  <p className="home-agent-pane-label">Chat</p>
+                  {[
+                    { role: "user",  msg: "Build me a task manager with drag-and-drop and team assignments." },
+                    { role: "agent", msg: "Scoped. Stack: Next.js + Supabase + @dnd-kit. 3 screens: Board, Team, Settings. Est. 42 credits. Approve?" },
+                    { role: "user",  msg: "Yes, go." },
+                    { role: "agent", msg: "Generating board layout with Kanban columns, drag handles, and task cards… done. Preview is live." },
+                  ].map(({ role, msg }, i) => (
+                    <div className={`mb-3 flex gap-3 ${role === "user" ? "justify-end" : ""}`} key={i}>
+                      {role === "agent" && (
+                        <span className="home-agent-avatar">SP</span>
+                      )}
+                      <p className={`home-agent-bubble ${role === "user" ? "home-agent-bubble--user" : "home-agent-bubble--agent"}`}>
+                        {msg}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                <div className="home-agent-preview">
+                  <p className="home-agent-pane-label">Preview</p>
+                  <div className="home-preview-frame">
+                    <div className="home-preview-topbar">
+                      <p className="text-sm font-semibold">Task Manager Pro</p>
+                      <span className="home-preview-live">Live</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {["Todo", "In Progress", "Done"].map((col) => (
+                        <div className="home-preview-col" key={col}>
+                          <p className="mb-2 text-xs font-bold text-zinc-400">{col}</p>
+                          <div className="space-y-1.5">
+                            {[1, 2].map((n) => (
+                              <div className="home-preview-task" key={n}>Task {n}</div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </AnimateIn>
         </div>
       </section>
 
-      <section className="section border-t border-zinc-800/60 bg-zinc-950">
+      {/* ── Everything a serious builder needs ── */}
+      <section className="section home-features-section">
         <div className="container">
-          <h2>Everything a serious builder needs.</h2>
-          <div className="mt-10 grid gap-0 divide-y divide-zinc-800 rounded-lg border border-zinc-800">
-            {DEVELOPER_FEATURES.map((item) => (
-              <div className="flex flex-wrap items-start gap-6 px-6 py-5" key={item.title}>
-                <p className="min-w-[200px] font-semibold text-white">{item.title}</p>
-                <p className="text-slate-400">{item.body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="container">
-          <h2>Builders trust SpringBloom.</h2>
-          <div className="mt-8 grid-3">
-            {MOCK_TESTIMONIALS.map((testimonial) => (
-              <article className="card feature-card" key={testimonial.name}>
-                <p className="leading-7 text-slate-300">&ldquo;{testimonial.text}&rdquo;</p>
-                <div className="mt-5 flex items-center gap-3">
-                  <span aria-hidden="true" className="grid h-9 w-9 place-items-center rounded-full bg-[var(--primary)] text-sm font-bold text-white">{testimonial.initials}</span>
-                  <div>
-                    <p className="font-semibold">{testimonial.name}</p>
-                    <p className="text-sm font-bold text-slate-500">{testimonial.role} · {testimonial.company}</p>
+          <AnimateIn from="bottom">
+            <h2>Everything a serious builder needs.</h2>
+            <p className="section-lede">
+              No stitching tools together. SpringBloom handles every layer of a production app.
+            </p>
+          </AnimateIn>
+          <AnimateIn from="bottom" delay={80}>
+            <div className="mt-10 home-features-table">
+              {DEVELOPER_FEATURES.map((item, i) => (
+                <div className="home-features-row" key={item.title}>
+                  <div className="home-features-row-icon">
+                    <CheckCircle2 size={16} color="var(--primary)" />
                   </div>
+                  <p className="home-features-row-title">{item.title}</p>
+                  <p className="home-features-row-body">{item.body}</p>
                 </div>
-              </article>
+              ))}
+            </div>
+          </AnimateIn>
+        </div>
+      </section>
+
+      {/* ── Testimonials ── */}
+      <section className="section home-testimonials-section">
+        <div className="container">
+          <AnimateIn from="bottom">
+            <h2>Builders trust SpringBloom.</h2>
+            <p className="section-lede">From first prototype to production — teams use SpringBloom daily.</p>
+          </AnimateIn>
+          <div className="mt-8 grid-3">
+            {MOCK_TESTIMONIALS.map((testimonial, i) => (
+              <AnimateIn from="bottom" delay={i * 80} key={testimonial.name}>
+                <article className="home-testimonial-card">
+                  <div className="home-testimonial-stars">{"★".repeat(5)}</div>
+                  <p className="mt-4 leading-7 text-slate-300">&ldquo;{testimonial.text}&rdquo;</p>
+                  <div className="mt-6 flex items-center gap-3">
+                    <span className="home-testimonial-avatar">{testimonial.initials}</span>
+                    <div>
+                      <p className="font-semibold text-white">{testimonial.name}</p>
+                      <p className="text-sm font-medium text-slate-500">{testimonial.role} · {testimonial.company}</p>
+                    </div>
+                  </div>
+                </article>
+              </AnimateIn>
             ))}
           </div>
         </div>
