@@ -51,6 +51,7 @@ export async function enhanceMobilePrompt(
   },
   scaffoldContext = '',
   designSystemContext = '',
+  uiuxContext = '',
 ): Promise<string> {
   // If the prompt is already detailed, skip
   if (userPrompt.length > 200 && hasDetailedTerms(userPrompt)) {
@@ -70,10 +71,14 @@ export async function enhanceMobilePrompt(
       ? `\n\n${designSystemContext}`
       : ''
 
+    const uiuxBlock = uiuxContext
+      ? `\n\nUI/UX PATTERNS TO APPLY:\n${uiuxContext}`
+      : ''
+
     const { text } = await generateText({
       model: anthropic('claude-haiku-4-5'),
       system: MOBILE_ENHANCER_SYSTEM,
-      prompt: `Framework: ${context.framework}\nProject type: ${context.projectType}${briefContext}${scaffoldBlock}${designBlock}\n\nUser prompt to enhance:\n"${userPrompt}"\n\nReturn only the enhanced prompt string.`,
+      prompt: `Framework: ${context.framework}\nProject type: ${context.projectType}${briefContext}${scaffoldBlock}${designBlock}${uiuxBlock}\n\nUser prompt to enhance:\n"${userPrompt}"\n\nReturn only the enhanced prompt string.`,
       maxOutputTokens: 512,
     })
 

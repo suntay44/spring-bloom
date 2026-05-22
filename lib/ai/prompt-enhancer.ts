@@ -11,6 +11,7 @@
 import { enhanceWebPrompt } from './web-enhancer'
 import { enhanceMobilePrompt } from './mobile-enhancer'
 import { lookupTemplate } from '@/lib/library/template-lookup'
+import { retrieveUiuxModules } from '@/lib/library/uiux-lookup'
 import { matchDesignSystem, type DesignSystem } from '@/lib/library/design-matcher'
 
 export interface EnhancerContext {
@@ -39,10 +40,21 @@ export async function enhancePrompt(
     context.projectType === 'mobile' ||
     context.framework === 'react-native'
 
-  // Look up a matching scaffold template from the library (fast, keyword-based)
-  const { context: scaffoldContext, templateName } = await lookupTemplate(userPrompt, isMobile)
+  // Run scaffold lookup + UI/UX module retrieval in parallel — both are fast
+  // keyword-based DB queries that must never block generation
+  const [
+    { context: scaffoldContext, templateName },
+    { context: uiuxContext, matched: uiuxMatched },
+  ] = await Promise.all([
+    lookupTemplate(userPrompt, isMobile),
+    retrieveUiuxModules(userPrompt),
+  ])
+
   if (templateName) {
-    console.info(`[prompt-enhancer] Matched template: ${templateName}`)
+    console.info(`[prompt-enhancer] Matched scaffold: ${templateName}`)
+  }
+  if (uiuxMatched.length) {
+    console.info(`[prompt-enhancer] Matched UI/UX modules: ${uiuxMatched.join(', ')}`)
   }
 
   // Match a design system (colors / style / typography) from the vendored data
@@ -58,10 +70,10 @@ export async function enhancePrompt(
   }
 
   if (isMobile) {
-    return enhanceMobilePrompt(userPrompt, context, scaffoldContext, designSystemContext)
+    return enhanceMobilePrompt(userPrompt, context, scaffoldContext, designSystemContext, uiuxContext)
   }
 
-  return enhanceWebPrompt(userPrompt, context, scaffoldContext, designSystemContext)
+  return enhanceWebPrompt(userPrompt, context, scaffoldContext, designSystemContext, uiuxContext)
 }
 
 /** Compact (~150 token) design system block injected into the enhancer prompt. */
@@ -77,7 +89,7 @@ function formatDesignSystemBlock(ds: DesignSystem): string {
 }
 
 /** Heuristic: short imperative commands on existing UI don't need expansion. */
-function isRefinementMessage(prompt: string): boolean {
+export function isRefinementMessage(prompt: string): boolean {
   const lower = prompt.trim().toLowerCase()
 
   // Very short messages are refinements
