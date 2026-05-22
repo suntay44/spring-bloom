@@ -12,14 +12,14 @@ interface UpgradeModalProps {
 
 const PLAN_HIGHLIGHTS: Record<"Starter" | "Pro", string[]> = {
   Starter: [
-    "500 credits / month",
+    "50 credits / month",
     "Publish to springbloom.app",
     "GitHub export",
     "Credit top-ups",
     "Credits roll over",
   ],
   Pro: [
-    "1,500 credits / month",
+    "150 credits / month",
     "Unlimited projects",
     "Custom domain",
     "Priority support",

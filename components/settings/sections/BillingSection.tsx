@@ -18,10 +18,10 @@ type BillingSectionProps = {
 };
 
 const CREDIT_PACKS: Array<{ label: string; credits: number; price: string; perCredit: string; popular?: boolean }> = [
-  { label: "100 credits", credits: 100, price: "$17", perCredit: "$0.170" },
-  { label: "250 credits", credits: 250, price: "$40", perCredit: "$0.160", popular: true },
-  { label: "500 credits", credits: 500, price: "$75", perCredit: "$0.150" },
-  { label: "1,000 credits", credits: 1_000, price: "$140", perCredit: "$0.140" },
+  { label: "10 credits",  credits: 10,  price: "$4",  perCredit: "$0.40" },
+  { label: "25 credits",  credits: 25,  price: "$8",  perCredit: "$0.32", popular: true },
+  { label: "50 credits",  credits: 50,  price: "$14", perCredit: "$0.28" },
+  { label: "100 credits", credits: 100, price: "$25", perCredit: "$0.25" },
 ];
 
 const PLAN_LABELS: Record<string, string> = {

@@ -54,12 +54,12 @@ export const pricingPlans: PricingPlan[] = [
   {
     name: "Free",
     price: "$0",
-    credits: "100 credits to start",
+    credits: "20 credits to start",
     projects: "1 project",
     cta: "Start free",
     description: "Try SpringBloom and build your first app.",
     features: [
-      { text: "100 one-time credits", included: true },
+      { text: "20 one-time credits", included: true },
       { text: "1 active project", included: true },
       { text: "Live preview in builder", included: true },
       { text: "Community support", included: true },
@@ -72,12 +72,12 @@ export const pricingPlans: PricingPlan[] = [
   {
     name: "Starter",
     price: "$12",
-    credits: "500 credits / month",
+    credits: "50 credits / month",
     projects: "3 projects",
     cta: "Choose Starter",
     description: "For builders shipping real projects.",
     features: [
-      { text: "500 credits / month", included: true },
+      { text: "50 credits / month", included: true },
       { text: "3 active projects", included: true },
       { text: "Publish to springbloom.app", included: true },
       { text: "GitHub export", included: true },
@@ -90,13 +90,13 @@ export const pricingPlans: PricingPlan[] = [
   {
     name: "Pro",
     price: "$29",
-    credits: "1,500 credits / month",
+    credits: "150 credits / month",
     projects: "Unlimited projects",
     cta: "Choose Pro",
     featured: true,
     description: "For professionals who build daily.",
     features: [
-      { text: "1,500 credits / month", included: true },
+      { text: "150 credits / month", included: true },
       { text: "Unlimited projects", included: true },
       { text: "Publish + custom domain", included: true },
       { text: "GitHub export", included: true },

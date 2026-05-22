@@ -28,12 +28,12 @@ export default async function AdminSettingsPage() {
     { key: "rate_limit.pro_rpm",             value: 30  },
     { key: "rate_limit.teams_rpm",           value: 60  },
     // Monthly credit allocation per plan
-    { key: "credits.free_monthly",           value: 50    },
-    { key: "credits.starter_monthly",        value: 500   },
-    { key: "credits.pro_monthly",            value: 2000  },
-    { key: "credits.teams_monthly",          value: 10000 },
+    { key: "credits.free_monthly",           value: 20   },
+    { key: "credits.starter_monthly",        value: 50   },
+    { key: "credits.pro_monthly",            value: 150  },
+    { key: "credits.teams_monthly",          value: 500  },
     // Billing — used by Cost & Margin analytics
-    { key: "billing.usd_per_credit",         value: 0.001 },
+    { key: "billing.usd_per_credit",         value: 0.24 },
     { key: "billing.free_ai_cost_budget_usd",value: 5     },
     // Analytics display preferences
     { key: "analytics.retention_days",       value: 90  },

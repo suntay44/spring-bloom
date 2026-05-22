@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveModel } from '@/lib/ai/providers'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
-import { buildContextMessages } from '@/lib/ai/context-manager'
+import { buildContextMessages, shouldCompress, generateContextSummary } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
 import { estimateCredits } from '@/lib/ai/credit-estimator'
 import { chatRateLimit } from '@/lib/rate-limit'
@@ -249,7 +249,41 @@ export async function POST(req: Request) {
     .select('role, content')
     .eq('project_id', projectId)
     .order('created_at', { ascending: true })
-    .limit(30)
+    .limit(50)  // load more than we send — compression decides what survives
+
+  const allMessages = dbMessages ?? []
+
+  // ── Context compression ───────────────────────────────────────────────────
+  // When a session grows long, summarise the older slice with Claude Haiku
+  // (cheap, fast) and cache it on the project row. The verbatim window
+  // (last 8 messages) is always sent in full — only older messages are folded
+  // into the summary. This keeps input token costs flat regardless of session
+  // length and prevents per-message cost from ballooning in long chats.
+  let contextSummary: string | undefined
+  if (shouldCompress(allMessages.length)) {
+    // Try to load cached summary from project row first
+    const { data: projectRow } = await supabase
+      .from('projects')
+      .select('context_summary')
+      .eq('id', projectId)
+      .single()
+
+    if (projectRow?.context_summary) {
+      contextSummary = projectRow.context_summary as string
+    } else {
+      // Generate and cache — fire-and-forget the cache write so it doesn't
+      // block the user's response
+      try {
+        const summary = await generateContextSummary(allMessages)
+        if (summary) {
+          contextSummary = summary
+          supabase.from('projects').update({ context_summary: summary }).eq('id', projectId)
+        }
+      } catch {
+        // Non-fatal: fall through with no summary (full verbatim window still sent)
+      }
+    }
+  }
 
   // Replace the last user message in context with the enhanced + attachment-
   // augmented version so the model sees the richer spec, while the user still
@@ -257,14 +291,14 @@ export async function POST(req: Request) {
   const finalUserMessage = (enhancedMessage !== rawUserMessage ? enhancedMessage : rawUserMessage)
     + csvContextBlock
     + otherFilesBlock
-  const messagesForContext = (dbMessages ?? []).map((m, idx, arr) => {
+  const messagesForContext = allMessages.map((m, idx, arr) => {
     if (m.role === 'user' && idx === arr.length - 1) {
       return { ...m, content: finalUserMessage }
     }
     return m
   })
 
-  const contextMessages = buildContextMessages(messagesForContext, undefined, [])
+  const contextMessages = buildContextMessages(messagesForContext, contextSummary, [])
 
   // Multimodal: attach image parts to the final user message for vision-capable models.
   const imageAttachments = loadedAttachments.filter((a) => a.kind === 'image')

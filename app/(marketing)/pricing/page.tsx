@@ -19,12 +19,12 @@ export const metadata: Metadata = {
 // ── Credit usage examples ────────────────────────────────────────────────────
 
 const CREDIT_EXAMPLES = [
-  { icon: Zap,          label: "Initial app build",       range: "50–150",  unit: "credits", note: "Full scaffold + DB schema + auth" },
-  { icon: ShieldCheck,  label: "Security scan",           range: "10–40",   unit: "credits", note: "RLS check + secrets + headers" },
-  { icon: CheckCircle2, label: "AI code review",          range: "5–25",    unit: "credits", note: "Per meaningful diff" },
-  { icon: GitBranch,    label: "GitHub export",           range: "2–8",     unit: "credits", note: "Clean commits, PR-style diffs" },
-  { icon: BarChart3,    label: "Analytics dashboard",     range: "15–45",   unit: "credits", note: "Event setup + visualizations" },
-  { icon: Users,        label: "Auth + team invite flow", range: "20–60",   unit: "credits", note: "OAuth, invites, role management" },
+  { icon: Zap,          label: "Initial app build",       range: "5–20",   unit: "credits", note: "Full scaffold + DB schema + auth" },
+  { icon: ShieldCheck,  label: "Security scan",           range: "1–3",    unit: "credits", note: "RLS check + secrets + headers" },
+  { icon: CheckCircle2, label: "AI code review",          range: "0.5–2",  unit: "credits", note: "Per meaningful diff" },
+  { icon: GitBranch,    label: "GitHub export",           range: "0.2–1",  unit: "credits", note: "Clean commits, PR-style diffs" },
+  { icon: BarChart3,    label: "Analytics dashboard",     range: "2–5",    unit: "credits", note: "Event setup + visualizations" },
+  { icon: Users,        label: "Auth + team invite flow", range: "3–8",    unit: "credits", note: "OAuth, invites, role management" },
 ] as const;
 
 // ── FAQ ──────────────────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ const FAQ = [
   },
   {
     q: "Can I try SpringBloom for free?",
-    a: "Every new account starts with 100 free credits — no credit card required. Enough to build and preview a real app.",
+    a: "Every new account starts with 20 free credits — no credit card required. Enough to build and preview your first app.",
   },
   {
     q: "Is there a limit on projects?",
@@ -85,7 +85,7 @@ export default function PricingPage() {
           </AnimateIn>
           <AnimateIn from="fade" delay={220}>
             <div className="pricing-hero-trust">
-              <span>100 free credits to start</span>
+              <span>20 free credits to start</span>
               <span>No credit card required</span>
               <span>Unused credits roll over</span>
             </div>

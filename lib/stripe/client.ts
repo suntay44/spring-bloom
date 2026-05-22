@@ -13,12 +13,13 @@ export function getStripe(): Stripe {
   return _stripe
 }
 
-// Top-up pack definitions — single source of truth
+// Top-up pack definitions — single source of truth.
+// Per-credit price is higher than plan rate to incentivise subscribing.
 export const CREDIT_PACKS = [
-  { credits: 100,  priceUsd: 17,  label: '100 credits',   popular: false },
-  { credits: 250,  priceUsd: 40,  label: '250 credits',   popular: true  },
-  { credits: 500,  priceUsd: 75,  label: '500 credits',   popular: false },
-  { credits: 1000, priceUsd: 140, label: '1,000 credits', popular: false },
+  { credits: 10,  priceUsd: 4,  label: '10 credits',  popular: false },  // $0.40/cr
+  { credits: 25,  priceUsd: 8,  label: '25 credits',  popular: true  },  // $0.32/cr
+  { credits: 50,  priceUsd: 14, label: '50 credits',  popular: false },  // $0.28/cr
+  { credits: 100, priceUsd: 25, label: '100 credits', popular: false },  // $0.25/cr
 ] as const
 
 export type CreditPack = typeof CREDIT_PACKS[number]
@@ -32,10 +33,11 @@ export const SUBSCRIPTION_PRICES: Record<string, string> = {
 
 export type SubscriptionPlan = 'starter' | 'pro' | 'teams'
 
-// Monthly credits granted per plan on invoice.paid
+// Monthly credits granted per plan on invoice.paid — must stay in sync with
+// PLAN_CREDIT_LIMITS in lib/credits/limits.ts
 export const PLAN_MONTHLY_CREDITS: Record<SubscriptionPlan, number> = {
-  starter: 100,
-  pro:     175,
+  starter: 50,
+  pro:     150,
   teams:   500,
 }
 
