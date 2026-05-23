@@ -21,7 +21,8 @@ import { isRefinementMessage } from '@/lib/ai/prompt-enhancer'
 import { shouldCompress, buildContextMessages } from '@/lib/ai/context-manager'
 import { scoreModule } from '@/lib/library/uiux-lookup'
 
-// ── Module definitions (post-026 tags) ───────────────────────────────────────
+// ── Module definitions (post-027 tags) ───────────────────────────────────────
+// Migration 027 added overflow/truncate/ellipsis tags to Badge & Pill Variants.
 
 const MODULES = [
   { name: 'App Shell Layout',    category: 'layout',     tags: ['layout','sidebar','responsive','shell','app','scaffold','structure','navigation'] },
@@ -36,6 +37,8 @@ const MODULES = [
   { name: 'Navigation Patterns (Tailwind)', category: 'tailwind', tags: ['nav','navigation','sidebar','menu','breadcrumb','tabs','tailwind'] },
   { name: 'Alert & Notification (Tailwind)', category: 'tailwind', tags: ['alert','notification','toast','warning','error','success','info','tailwind','banner'] },
   { name: 'Dark Mode Toggle Pattern (Tailwind)', category: 'tailwind', tags: ['dark-mode','dark','light','theme','toggle','next-themes','tailwind','color-scheme'] },
+  // Migration 027: Badge & Pill now includes overflow/truncate tags
+  { name: 'Badge & Pill Variants (Tailwind)', category: 'tailwind', tags: ['badge','pill','tag','status','label','tailwind','chip','overflow','truncate','ellipsis','text-overflow','nowrap','max-w','clamp','long-text','pill-overflow','badge-overflow'] },
 ]
 
 function getTopModules(prompt: string, max = 4) {
@@ -143,25 +146,28 @@ describe('Turn 3: "I attached images, fix the slide transition and pills text ov
     expect(score).toBeGreaterThanOrEqual(1)
   })
 
-  it('retrieves Alert/Notification or Badge module for "overflow" / "pills"', () => {
-    // "pills" does not directly appear in tags but the user intent is overflow/truncation
-    // No direct tag match — this exposes a gap: no "overflow" or "truncate" tag exists
-    const pillsScore = scoreModule(
+  it('retrieves Badge & Pill module for "overflow" / "pills" (fixed in migration 027)', () => {
+    // Migration 027 added overflow/truncate/ellipsis/pill tags to Badge & Pill Variants.
+    // "overflow" and "pills" now hit that module directly.
+    const badgePillScore = scoreModule(
       TURN_3.toLowerCase(),
-      MODULES.find(m => m.name === 'Alert & Notification (Tailwind)')!
+      MODULES.find(m => m.name === 'Badge & Pill Variants (Tailwind)')!
     )
-    // Low or 0 — "pills" and "overflow" are not in current tags
-    expect(pillsScore).toBeLessThan(2)
+    // "overflow" → tag match (+2), "pills" → tag hit on 'pill' (+2) = score ≥ 2
+    expect(badgePillScore).toBeGreaterThanOrEqual(2)
   })
 
-  it('exposes tag gap: "pill", "overflow", "truncate" not in any module tags', () => {
-    // Users fixing UI overflow/pill issues get no targeted pattern guidance.
-    // Recommended fix: add "pill","overflow","truncate","ellipsis" to Badge & Pill module
-    const hasPillTag    = MODULES.some(m => m.tags.includes('pill'))
+  it('migration 027 fixed the tag gap: overflow and pill now exist in module tags', () => {
+    // Before 027: no module had "overflow" or "truncate" tags → turn 3 got 0 RAG hits for pills.
+    // After 027: Badge & Pill Variants carries overflow, truncate, ellipsis, pill tags.
+    const hasPillTag     = MODULES.some(m => m.tags.includes('pill'))
     const hasOverflowTag = MODULES.some(m => m.tags.includes('overflow'))
-    // pill IS in Badge & Pill Variants (Tailwind) — but that module isn't in
-    // our reduced MODULES array for this test. overflow is not in any module.
-    expect(hasOverflowTag).toBe(false) // documents the gap
+    const hasTruncateTag = MODULES.some(m => m.tags.includes('truncate'))
+    const hasEllipsisTag = MODULES.some(m => m.tags.includes('ellipsis'))
+    expect(hasPillTag).toBe(true)
+    expect(hasOverflowTag).toBe(true)
+    expect(hasTruncateTag).toBe(true)
+    expect(hasEllipsisTag).toBe(true)
   })
 
   it('context window at turn 3: all 5 messages visible (within verbatim window)', () => {
