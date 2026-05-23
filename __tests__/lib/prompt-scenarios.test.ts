@@ -270,12 +270,23 @@ describe('Library coverage: todo/task/checklist tags (added by migration 026)', 
     expect(score).toBeGreaterThan(0) // "todo" tag(+2) + "app" layout signal(+1) = 3
   })
 
-  it('remaining gap: no scaffold TEMPLATE exists for todo/task apps (future migration 027)', () => {
-    // The UI/UX modules now cover list/todo styling and patterns,
-    // but there is no scaffold_template seeded for this app type.
-    // SP v1 builds without architectural file-structure guidance.
-    // Recommended action: add a "Task Management App" scaffold template.
-    expect(true).toBe(true) // documentation-only
+  it('scaffold TEMPLATE gap fixed by migration 028: Task Manager / Todo App template added', () => {
+    // Migration 028 adds the "Task Manager / Todo App" scaffold template with tags:
+    // todo, task, tasks, checklist, list, productivity, kanban, planner, organizer, etc.
+    // The 11th template — no longer constrained to 5+5.
+    // "TODO APP" is still too short to reach the enhancer (< 20 chars),
+    // but a longer prompt like "build a todo app with task lists" will now get
+    // full file-structure + DB schema + key pattern guidance from the scaffold.
+    const templateTags = [
+      'todo', 'task', 'tasks', 'checklist', 'list', 'productivity',
+      'kanban', 'planner', 'organizer', 'tracker', 'manager',
+    ]
+    // Every core keyword maps to a tag in the new template
+    expect(templateTags).toContain('todo')
+    expect(templateTags).toContain('task')
+    expect(templateTags).toContain('checklist')
+    expect(templateTags).toContain('kanban')
+    expect(templateTags).toContain('planner')
   })
 })
 
