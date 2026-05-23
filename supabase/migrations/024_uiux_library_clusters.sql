@@ -17,8 +17,37 @@
 --   empty-states  — zero-data screens, skeleton loaders, error pages
 -- ──────────────────────────────────────────────────────────────────────────────
 
--- Ensure the cluster_type column accepts 'uiux' (add to check constraint if it exists)
--- We use a soft approach: just insert — the library table uses text not enum.
+-- ── Create tables if they don't exist yet ────────────────────────────────────
+
+create table if not exists public.library_clusters (
+  id           uuid primary key default gen_random_uuid(),
+  name         text not null,
+  description  text,
+  cluster_type text not null,
+  tags         text[] not null default '{}',
+  is_active    boolean not null default true,
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+alter table public.library_clusters enable row level security;
+
+create table if not exists public.library_modules (
+  id           uuid primary key default gen_random_uuid(),
+  cluster_id   uuid references public.library_clusters(id) on delete cascade,
+  name         text not null,
+  description  text,
+  category     text not null,
+  tags         text[] not null default '{}',
+  template     text not null default '',
+  is_active    boolean not null default true,
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+alter table public.library_modules enable row level security;
+
+create index if not exists library_modules_cluster_id_idx on public.library_modules(cluster_id);
+create index if not exists library_modules_category_idx   on public.library_modules(category);
+create index if not exists library_modules_is_active_idx  on public.library_modules(is_active);
 
 -- ── Insert UI/UX cluster ──────────────────────────────────────────────────────
 
