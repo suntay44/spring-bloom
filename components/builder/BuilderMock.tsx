@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { UIMessage } from "ai";
-import { ArrowUpRight, BarChart3, Check, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, ShieldCheck, Smartphone, Sparkles, Upload, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, BarChart3, Check, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, KeyRound, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Share2, ShieldCheck, Smartphone, Sparkles, Upload, type LucideIcon } from "lucide-react";
 import { ChatPanel } from "@/components/builder/ChatPanel";
 import { ProjectMenu, MoreToolsMenu, type BuilderTab, type ProjectMenuUser } from "@/components/builder/ProjectMenu";
 import { AnalyticsPanel } from "@/components/builder/panels/AnalyticsPanel";
@@ -10,6 +10,7 @@ import { DiffPanel } from "@/components/builder/panels/DiffPanel";
 import { FilesPanel } from "@/components/builder/panels/FilesPanel";
 import { FindingsPanel } from "@/components/builder/panels/FindingsPanel";
 import { IntegrationsPanel } from "@/components/builder/panels/IntegrationsPanel";
+import { AuthProvidersPanel } from "@/components/builder/panels/AuthProvidersPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
 import { PublishModal } from "@/components/builder/PublishModal";
 import { UpgradeModal } from "@/components/builder/UpgradeModal";
@@ -22,7 +23,7 @@ import type { MockProject, MockProjectType } from "@/lib/mock/projects";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
 import { MOCK_SECURITY_RUN } from "@/lib/mock/security";
 
-const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics", "Integrations"] as const;
+const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics", "Integrations", "Auth"] as const;
 
 const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Preview: Globe2,
@@ -32,6 +33,7 @@ const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Security: Cloud,
   Analytics: BarChart3,
   Integrations: Sparkles,
+  Auth: KeyRound,
 };
 
 const TYPE_LABELS: Record<MockProjectType, string> = {
@@ -84,6 +86,7 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
     Security:     () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
     Analytics:    () => <AnalyticsPanel />,
     Integrations: () => <IntegrationsPanel projectId={project.id} />,
+    Auth:         () => <AuthProvidersPanel projectId={project.id} />,
   };
 
   function toggleVisualEdits() {

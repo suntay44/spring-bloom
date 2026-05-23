@@ -74,3 +74,86 @@ export async function runMigration(ref: string, sql: string): Promise<void> {
   })
   if (!res.ok) throw new Error(`Migration failed on project ${ref}: ${await res.text()}`)
 }
+
+// ── Auth Provider Config ──────────────────────────────────────────────────────
+//
+// These two functions work with EITHER:
+//   A) SpringBloom-provisioned projects → pass pat = undefined (uses SUPABASE_MANAGEMENT_TOKEN)
+//   B) User BYOK projects               → pass pat = user's Personal Access Token
+//
+// The Management API endpoint:
+//   GET/PATCH https://api.supabase.com/v1/projects/{ref}/config/auth
+//
+// Derive ref from project URL: "https://xxx.supabase.co" → ref = "xxx"
+
+export interface AuthProviderConfig {
+  // Email
+  external_email_enabled:         boolean
+  // Google
+  external_google_enabled:        boolean
+  external_google_client_id:      string
+  external_google_secret:         string
+  // Apple
+  external_apple_enabled:         boolean
+  external_apple_client_id:       string  // Service ID
+  external_apple_secret:          string  // private key in PEM format
+  // Facebook / Meta
+  external_facebook_enabled:      boolean
+  external_facebook_client_id:    string
+  external_facebook_secret:       string
+  // GitHub
+  external_github_enabled:        boolean
+  external_github_client_id:      string
+  external_github_secret:         string
+}
+
+function resolveToken(pat?: string): string {
+  return pat ?? process.env.SUPABASE_MANAGEMENT_TOKEN!
+}
+
+/** Extract the project ref from a Supabase project URL.
+ *  "https://xxx.supabase.co" → "xxx"
+ *  "https://xxx.supabase.co/" → "xxx"
+ */
+export function refFromUrl(projectUrl: string): string {
+  const hostname = new URL(projectUrl).hostname       // "xxx.supabase.co"
+  return hostname.split('.')[0]!                      // "xxx"
+}
+
+/** Read the current auth provider config from the Supabase Management API. */
+export async function getAuthConfig(
+  projectUrl: string,
+  pat?: string,
+): Promise<Partial<AuthProviderConfig>> {
+  const ref = refFromUrl(projectUrl)
+  const res = await fetch(`${MGMT_BASE}/projects/${ref}/config/auth`, {
+    headers: {
+      Authorization: `Bearer ${resolveToken(pat)}`,
+      'Content-Type': 'application/json',
+    },
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to read auth config for ${ref}: ${await res.text()}`)
+  }
+  return res.json() as Promise<Partial<AuthProviderConfig>>
+}
+
+/** Update one or more auth provider settings. Only sends changed fields. */
+export async function updateAuthConfig(
+  projectUrl: string,
+  config: Partial<AuthProviderConfig>,
+  pat?: string,
+): Promise<void> {
+  const ref = refFromUrl(projectUrl)
+  const res = await fetch(`${MGMT_BASE}/projects/${ref}/config/auth`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${resolveToken(pat)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(config),
+  })
+  if (!res.ok) {
+    throw new Error(`Failed to update auth config for ${ref}: ${await res.text()}`)
+  }
+}

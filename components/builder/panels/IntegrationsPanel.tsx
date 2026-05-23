@@ -70,6 +70,7 @@ const INTEGRATIONS: IntegrationDef[] = [
       { key: "project_url",     label: "Project URL",       placeholder: "https://xxx.supabase.co", secret: false },
       { key: "anon_key",        label: "Anon Key",          placeholder: "eyJ…",                    secret: false },
       { key: "service_role_key",label: "Service Role Key",  placeholder: "eyJ…",                    secret: true,  hint: "Keep this secret — grants full DB access" },
+      { key: "management_pat",  label: "Management API Token", placeholder: "sbp_…",               secret: true,  hint: "Required for SSO auth provider toggles. Get yours at supabase.com/dashboard/account/tokens" },
     ],
   },
   {
@@ -185,6 +186,45 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
               />
             </div>
 
+            {/* ── Cost estimate ── */}
+            <CostCalculator hasSupabase={!!getIntegration("supabase")} hasStripe={!!getIntegration("stripe")} hasResend={!!getIntegration("resend")} hasTwilio={!!getIntegration("twilio")} />
+
+            {/* ── SpringBloom Cloud — coming soon ── */}
+            <div className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-950/30 to-zinc-900/60 p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Zap size={14} className="text-violet-400" />
+                  <span className="text-xs font-semibold text-violet-300">SpringBloom Cloud</span>
+                </div>
+                <span className="flex items-center gap-1 rounded bg-violet-900/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-400">
+                  <Clock size={9} /> Coming soon
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                Skip the setup. SpringBloom will provision Supabase, Stripe, and email — fully managed, pay-as-you-go. No accounts to create, no keys to paste.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                {[
+                  { label: "Managed database",      sub: "Supabase Micro · $10/mo" },
+                  { label: "AI generation credits",  sub: "Pay per build" },
+                  { label: "Email delivery",         sub: "Resend · included" },
+                  { label: "Auth providers",         sub: "Google, Apple & more" },
+                ].map(f => (
+                  <div key={f.label} className="flex flex-col gap-0.5 rounded-lg border border-violet-900/30 bg-violet-950/20 px-2.5 py-2">
+                    <span className="text-[11px] font-medium text-zinc-300">{f.label}</span>
+                    <span className="text-[10px] text-zinc-500">{f.sub}</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg bg-violet-600/20 border border-violet-500/30 py-2 text-[11px] font-semibold text-violet-300 hover:bg-violet-600/30 transition-colors"
+                type="button"
+                onClick={() => { window.open('mailto:hello@springbloom.dev?subject=Cloud+waitlist', '_blank') }}
+              >
+                Join the waitlist <ArrowRight size={11} />
+              </button>
+            </div>
+
             {/* ── Connectors — coming soon ── */}
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
@@ -214,6 +254,52 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Cost Calculator ─────────────────────────────────────────────────────────
+
+function CostCalculator({
+  hasSupabase, hasStripe, hasResend, hasTwilio,
+}: { hasSupabase: boolean; hasStripe: boolean; hasResend: boolean; hasTwilio: boolean }) {
+  const rows = [
+    { label: "Supabase Micro compute", cost: "$10 / mo", note: "always-on DB + auth", active: hasSupabase },
+    { label: "Supabase free tier credit", cost: "−$10 / mo", note: "1st project included", active: hasSupabase },
+    { label: "Stripe",                   cost: "2.9% + $0.30", note: "per transaction",  active: hasStripe  },
+    { label: "Resend",                   cost: "Free",          note: "up to 3k emails/mo", active: hasResend  },
+    { label: "Twilio",                   cost: "~$0.0079",      note: "per SMS",          active: hasTwilio  },
+  ]
+  const activeRows = rows.filter(r => r.active)
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Estimated monthly costs</span>
+      </div>
+      {activeRows.length === 0 ? (
+        <p className="text-[11px] text-zinc-600 italic">Connect an integration above to see its cost estimate.</p>
+      ) : (
+        <div className="space-y-1">
+          {activeRows.map(r => (
+            <div key={r.label} className="flex items-center justify-between gap-2">
+              <div className="flex flex-col">
+                <span className="text-[11px] text-zinc-300">{r.label}</span>
+                <span className="text-[10px] text-zinc-600">{r.note}</span>
+              </div>
+              <span className={`text-[11px] font-mono font-semibold shrink-0 ${r.cost.startsWith('−') ? 'text-emerald-400' : 'text-zinc-300'}`}>{r.cost}</span>
+            </div>
+          ))}
+          {hasSupabase && (
+            <div className="mt-1.5 border-t border-zinc-800 pt-1.5 flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-zinc-400">Supabase net</span>
+              <span className="text-[11px] font-mono font-bold text-emerald-400">$0 / mo</span>
+            </div>
+          )}
+        </div>
+      )}
+      <p className="text-[10px] text-zinc-600 leading-snug">
+        Costs go to your own accounts — SpringBloom doesn&apos;t add markup on BYOK integrations.
+      </p>
     </div>
   )
 }

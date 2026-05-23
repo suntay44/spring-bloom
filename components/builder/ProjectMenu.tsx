@@ -4,10 +4,10 @@ import { useState, type ComponentType } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, GitFork, Gift, Globe2, HelpCircle, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, GitFork, Gift, Globe2, HelpCircle, KeyRound, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "@/lib/toast";
 
-export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations";
+export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations" | "Auth";
 
 export type ProjectMenuUser = {
   initials: string;
@@ -28,6 +28,7 @@ const TOOL_ITEMS = [
   { label: "Cloud",        icon: Cloud,      pinned: true,  tab: "Security"      },
   { label: "Code",         icon: Code2,      pinned: true,  tab: "Diff"          },
   { label: "Files",        icon: FileText,   pinned: true,  tab: "Files"         },
+  { label: "Auth",         icon: KeyRound,   pinned: true,  tab: "Auth",         active: false },
   { label: "Integrations", icon: Sparkles,   pinned: true,  tab: "Integrations", active: false },
   { label: "Payments",     icon: CreditCard, pinned: false, tab: "Integrations", active: false },
   { label: "Security",     icon: ShieldCheck,pinned: false, tab: "Security"      },

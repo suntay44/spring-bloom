@@ -17,7 +17,7 @@ import { writeRateLimit } from "@/lib/rate-limit"
 // Which fields in each integration type are secrets vs public
 const SECRET_FIELDS: Record<string, string[]> = {
   stripe:    ["secret_key", "webhook_secret"],
-  supabase:  ["service_role_key"],
+  supabase:  ["service_role_key", "management_pat"],
   twilio:    ["api_key_secret"],
   openai:    ["api_key"],
   anthropic: ["api_key"],
