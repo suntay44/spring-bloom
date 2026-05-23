@@ -17,14 +17,13 @@ import { generateText } from 'ai'
 import { resolveModel } from '@/lib/ai/providers'
 import type { ScopingQuestion } from '@/lib/mock/messages'
 
-const PLANNING_SYSTEM_PROMPT = `You are a planning agent for a no-code app builder called SpringBloom.
-Your job is to generate 3–5 clarifying questions before building an app.
+const FIRST_MESSAGE_SYSTEM_PROMPT = `You are a planning agent for a no-code app builder called SpringBloom.
+Your job is to generate 3–5 clarifying questions before building an app from scratch.
 
 RULES:
 - Each question must affect the architecture, schema, or core features — not just styling
 - Write for non-developers. No tech jargon (say "user accounts" not "auth", "save to database" not "persist to Supabase")
 - Prefer multiple-choice questions with 2–4 options. Each option needs a short description (1 sentence)
-- Always include an "Other" option for choice questions so users can type freely
 - Never ask about colors, fonts, or visual style — that's handled separately
 - Never ask more than 5 questions
 - Return ONLY valid JSON — no markdown, no explanation, no preamble
@@ -49,8 +48,39 @@ OUTPUT FORMAT (strict JSON):
   ]
 }`
 
+const MID_CONVERSATION_SYSTEM_PROMPT = `You are a planning agent for a no-code app builder called SpringBloom.
+The user is mid-conversation and just requested a new feature that needs clarification.
+Generate 2–3 focused questions specifically about THIS feature — not the whole app.
+
+RULES:
+- Ask only about THIS specific feature, not general app questions
+- Each question must change how the feature is built (not just styled)
+- Write for non-developers. No tech jargon
+- Prefer multiple-choice with 2–3 options + short description each
+- Keep it short — max 3 questions. The user already has a running app
+- Return ONLY valid JSON — no markdown, no explanation, no preamble
+
+OUTPUT FORMAT (strict JSON):
+{
+  "questions": [
+    {
+      "id": "q1",
+      "text": "Question text here?",
+      "type": "choice",
+      "options": [
+        { "value": "option-a", "label": "Short Label", "description": "One sentence." },
+        { "value": "option-b", "label": "Short Label", "description": "One sentence." }
+      ]
+    }
+  ]
+}`
+
+export type QuestionTrigger = 'first_message' | 'ambiguous_feature'
+
 /**
- * Generate planning questions for the user's first prompt.
+ * Generate planning questions for a prompt.
+ * Uses different system prompts depending on whether this is the first message
+ * or a mid-conversation ambiguous feature request.
  * Falls back to an empty array on any error — generation must never block.
  */
 export async function generatePlanningQuestions(
@@ -58,6 +88,7 @@ export async function generatePlanningQuestions(
   modelId: string,
   provider: string,
   scaffoldName: string | null,
+  trigger: QuestionTrigger = 'first_message',
 ): Promise<ScopingQuestion[]> {
   try {
     const model = resolveModel(modelId, provider)
@@ -66,19 +97,24 @@ export async function generatePlanningQuestions(
       return []
     }
 
-    const scaffoldContext = scaffoldName
-      ? `The user's prompt matched this scaffold template: "${scaffoldName}".
-Use this to ask questions specific to that app type.`
-      : 'No specific scaffold template was matched. Ask general purpose questions.'
+    const systemPrompt = trigger === 'first_message'
+      ? FIRST_MESSAGE_SYSTEM_PROMPT
+      : MID_CONVERSATION_SYSTEM_PROMPT
 
-    const userContext = `User's first prompt: "${userPrompt}"\n\n${scaffoldContext}`
+    const scaffoldContext = scaffoldName
+      ? `Matched scaffold template: "${scaffoldName}".`
+      : ''
+
+    const userContext = trigger === 'first_message'
+      ? `User's first prompt: "${userPrompt}"\n\n${scaffoldContext}`
+      : `User's feature request: "${userPrompt}"\n\n${scaffoldContext}`
 
     const { text } = await generateText({
       model,
-      system: PLANNING_SYSTEM_PROMPT,
+      system: systemPrompt,
       prompt: userContext,
       maxOutputTokens: 800,
-      temperature: 0.3, // low temp = consistent, structured output
+      temperature: 0.3,
     })
 
     // Extract JSON — the model might wrap it in backticks despite instructions

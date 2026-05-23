@@ -63,8 +63,12 @@ export async function POST(
 
   const { id: projectId } = await params
 
-  const body = await req.json() as { prompt?: string; modelId?: string }
-  const { prompt, modelId } = body
+  const body = await req.json() as {
+    prompt?: string
+    modelId?: string
+    trigger?: 'first_message' | 'ambiguous_feature'
+  }
+  const { prompt, modelId, trigger = 'first_message' } = body
 
   if (!prompt || !modelId) {
     return NextResponse.json({ error: 'prompt and modelId are required' }, { status: 400 })
@@ -98,7 +102,7 @@ export async function POST(
   const { templateName } = await lookupTemplate(prompt, isMobile)
 
   // Generate questions using the user's own selected model
-  const questions = await generatePlanningQuestions(prompt, modelId, provider, templateName)
+  const questions = await generatePlanningQuestions(prompt, modelId, provider, templateName, trigger)
 
   // Upsert brief — safe to re-call if user goes back and changes their prompt
   await supabase

@@ -7,6 +7,7 @@ import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, X, Zap } fr
 import { MessageItem } from "@/components/builder/MessageItem";
 import { ScopingQuestionsCard } from "@/components/builder/ScopingQuestionsCard";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
+import { shouldAskQuestions } from "@/lib/ai/ambiguity-detector";
 import type { ScopingQuestion } from "@/lib/mock/messages";
 import { estimateCredits } from "@/lib/ai/credit-estimator";
 import { runArtifactActions } from "@/lib/fly/action-runner";
@@ -83,6 +84,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   const [planningQuestions, setPlanningQuestions] = useState<ScopingQuestion[]>([]);
   // Hold the pending prompt while questions are shown, send after answers
   const pendingPromptRef = useRef<string>("");
+  const pendingTriggerRef = useRef<'first_message' | 'ambiguous_feature'>('first_message');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const supabaseClientRef = useRef<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
   if (!supabaseClientRef.current) {
@@ -312,12 +314,11 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
       return;
     }
 
-    // ── First message: generate planning questions before building ────────────
-    // Only trigger when this is the very first message in the project
-    // (no prior messages) and the prompt is long enough to be meaningful.
-    const isFirstMessage = messages.length === 0;
-    if (isFirstMessage && text.length >= 20) {
+    // ── Planning questions: first message OR ambiguous mid-conversation prompt ─
+    const ambiguity = shouldAskQuestions(text, messages.length);
+    if (ambiguity.shouldAsk) {
       pendingPromptRef.current = text;
+      pendingTriggerRef.current = ambiguity.reason === 'none' ? 'first_message' : ambiguity.reason;
       setInputValue("");
       setPlanningState('loading');
 
@@ -325,7 +326,11 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         const res = await fetch(`/api/projects/${projectId}/brief`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: text, modelId: selectedModelId }),
+          body: JSON.stringify({
+            prompt: text,
+            modelId: selectedModelId,
+            trigger: ambiguity.reason,
+          }),
         });
 
         if (res.ok) {
@@ -411,7 +416,11 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         {planningState === 'questions' && planningQuestions.length > 0 && (
           <div className="mx-3 my-2">
             <ScopingQuestionsCard
-              content="To make sure I build exactly what you need, I have a few questions."
+              content={
+                pendingTriggerRef.current === 'first_message'
+                  ? "To make sure I build exactly what you need, I have a few questions."
+                  : "Before I add this, a few quick questions to make sure I build it right."
+              }
               questions={planningQuestions}
               onSubmit={handlePlanningSubmit}
               onSkip={handlePlanningSkip}
