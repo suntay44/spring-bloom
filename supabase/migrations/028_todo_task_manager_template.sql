@@ -8,8 +8,7 @@
 
 insert into public.scaffold_templates
   (name, description, category, tags, scaffold, status)
-values
-(
+select
   'Task Manager / Todo App',
   'Full-featured task management app with lists, priorities, due dates, tags, and completion tracking.',
   'productivity',
@@ -47,5 +46,6 @@ values
     "default_modules": ["auth"]
   }',
   'active'
-)
-on conflict (name) do nothing;
+where not exists (
+  select 1 from public.scaffold_templates where name = 'Task Manager / Todo App'
+);
