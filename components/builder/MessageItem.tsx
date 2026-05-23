@@ -27,6 +27,7 @@ export function MessageItem({ message }: { message: MessageItemMessage }) {
       <ScopingQuestionsCard
         content={content}
         questions={message.questions}
+        onSubmit={() => {/* mock messages are read-only */}}
       />
     );
   }

@@ -5,9 +5,17 @@ export type MockArtifact = {
   status: "complete" | "streaming" | "queued" | "error";
 };
 
+export type ScopingQuestionOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
+
 export type ScopingQuestion = {
   id: string;
   text: string;
+  type?: 'choice' | 'text'; // default 'text' for backwards compat
+  options?: ScopingQuestionOption[];
 };
 
 export type MockMessage =

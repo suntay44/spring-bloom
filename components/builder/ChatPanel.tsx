@@ -5,7 +5,9 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
 import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, X, Zap } from "lucide-react";
 import { MessageItem } from "@/components/builder/MessageItem";
+import { ScopingQuestionsCard } from "@/components/builder/ScopingQuestionsCard";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
+import type { ScopingQuestion } from "@/lib/mock/messages";
 import { estimateCredits } from "@/lib/ai/credit-estimator";
 import { runArtifactActions } from "@/lib/fly/action-runner";
 import { toast } from "@/lib/toast";
@@ -71,6 +73,16 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   const [errorState, setErrorState] = useState<ErrorState>(null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  // ── Planning / scoping questions state ───────────────────────────────────────
+  // 'idle'      — normal chat, no questions pending
+  // 'loading'   — calling /api/projects/[id]/brief to generate questions
+  // 'questions' — showing ScopingQuestionsCard, waiting for answers
+  type PlanningState = 'idle' | 'loading' | 'questions';
+  const [planningState, setPlanningState] = useState<PlanningState>('idle');
+  const [planningQuestions, setPlanningQuestions] = useState<ScopingQuestion[]>([]);
+  // Hold the pending prompt while questions are shown, send after answers
+  const pendingPromptRef = useRef<string>("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const supabaseClientRef = useRef<ReturnType<typeof createSupabaseBrowserClient> | null>(null);
   if (!supabaseClientRef.current) {
@@ -277,27 +289,86 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
     setIsDragOver(false);
   }
 
-  async function handleSend() {
-    const text = inputValue.trim();
-    if (!text || isStreaming || running) return;
-    // Don't send while uploads are still in-flight, otherwise the chat route
-    // wouldn't see the attachment in the transport body.
-    if (attachments.some((a) => a.uploading)) {
-      toast.error("Wait for uploads to finish before sending.");
-      return;
-    }
+  /** Actually sends the message to /api/chat — called directly or after answers */
+  async function dispatchSend(text: string) {
     lastInputRef.current = text;
     setErrorState(null);
     clearError();
     await sendMessage({ text });
     setInputValue("");
-    // Reset attachments after successful send; release any blob: URLs.
     setAttachments((prev) => {
       for (const a of prev) {
         if (a.previewUrl && a.previewUrl.startsWith('blob:')) URL.revokeObjectURL(a.previewUrl);
       }
       return [];
     });
+  }
+
+  async function handleSend() {
+    const text = inputValue.trim();
+    if (!text || isStreaming || running) return;
+    if (attachments.some((a) => a.uploading)) {
+      toast.error("Wait for uploads to finish before sending.");
+      return;
+    }
+
+    // ── First message: generate planning questions before building ────────────
+    // Only trigger when this is the very first message in the project
+    // (no prior messages) and the prompt is long enough to be meaningful.
+    const isFirstMessage = messages.length === 0;
+    if (isFirstMessage && text.length >= 20) {
+      pendingPromptRef.current = text;
+      setInputValue("");
+      setPlanningState('loading');
+
+      try {
+        const res = await fetch(`/api/projects/${projectId}/brief`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: text, modelId: selectedModelId }),
+        });
+
+        if (res.ok) {
+          const json = await res.json() as { questions: ScopingQuestion[] };
+          if (json.questions?.length > 0) {
+            setPlanningQuestions(json.questions);
+            setPlanningState('questions');
+            return; // Wait for answers before sending
+          }
+        }
+      } catch (err) {
+        console.warn('[ChatPanel] Brief generation failed, proceeding without questions:', err);
+      }
+
+      // If brief call failed or returned no questions, just build immediately
+      setPlanningState('idle');
+      await dispatchSend(text);
+      return;
+    }
+
+    await dispatchSend(text);
+  }
+
+  /** User answered all questions — save answers then fire the generation */
+  async function handlePlanningSubmit(answers: Record<string, string>) {
+    const prompt = pendingPromptRef.current;
+    setPlanningState('idle');
+
+    // Save answers to project_briefs (fire-and-forget — don't block generation)
+    void fetch(`/api/projects/${projectId}/brief`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers }),
+    });
+
+    await dispatchSend(prompt);
+  }
+
+  /** User skipped questions — build immediately */
+  async function handlePlanningSkip() {
+    const prompt = pendingPromptRef.current;
+    setPlanningState('idle');
+    await dispatchSend(prompt);
   }
 
   function handleStop() {
@@ -329,6 +400,24 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
       <div className="conversation-scroll">
         <div className="build-stamp"><span>May 15 at 2:45 PM</span><div className="mini-preview">PRD approved</div></div>
         {messages.map((message) => <MessageItem key={message.id} message={message} />)}
+
+        {/* Planning state — shown when generating or displaying questions */}
+        {planningState === 'loading' && (
+          <div className="mx-3 my-2 flex items-center gap-2 text-sm text-slate-400">
+            <Loader2 className="animate-spin" size={14} />
+            <span>Let me ask a few things first…</span>
+          </div>
+        )}
+        {planningState === 'questions' && planningQuestions.length > 0 && (
+          <div className="mx-3 my-2">
+            <ScopingQuestionsCard
+              content="To make sure I build exactly what you need, I have a few questions."
+              questions={planningQuestions}
+              onSubmit={handlePlanningSubmit}
+              onSkip={handlePlanningSkip}
+            />
+          </div>
+        )}
         {errorState?.type === 'credits' && (
           <div className="mx-3 my-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-200">
             <p className="mb-2 font-medium">Not enough credits</p>
@@ -367,7 +456,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         </div>
       </div>
       <div
-        className={`agent-composer focus-within:ring-1 focus-within:ring-[var(--accent-cyan)]/30 ${isDragOver ? 'ring-2 ring-purple-400/60' : ''} ${isStreaming ? 'animate-pulse [box-shadow:0_0_0_1px_var(--accent-cyan)]' : ''}`}
+        className={`agent-composer focus-within:ring-1 focus-within:ring-[var(--accent-cyan)]/30 ${isDragOver ? 'ring-2 ring-purple-400/60' : ''} ${isStreaming ? 'animate-pulse [box-shadow:0_0_0_1px_var(--accent-cyan)]' : ''} ${planningState !== 'idle' ? 'pointer-events-none opacity-40' : ''}`}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
