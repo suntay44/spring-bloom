@@ -21,6 +21,21 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getAuthConfig, updateAuthConfig, refFromUrl, type AuthProviderConfig } from '@/lib/supabase/management'
 
+// Only these fields are safe to return to the browser — never return *_secret values
+const AUTH_CONFIG_PUBLIC_FIELDS = new Set([
+  'external_email_enabled',
+  'external_google_enabled',   'external_google_client_id',
+  'external_apple_enabled',    'external_apple_client_id',
+  'external_facebook_enabled', 'external_facebook_client_id',
+  'external_github_enabled',   'external_github_client_id',
+])
+
+function redactAuthConfig(config: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(config).filter(([k]) => AUTH_CONFIG_PUBLIC_FIELDS.has(k))
+  )
+}
+
 type Provider = 'email' | 'google' | 'apple' | 'facebook' | 'github'
 
 const PROVIDER_KEYS: Record<Provider, (keyof AuthProviderConfig)[]> = {
@@ -51,9 +66,9 @@ export async function GET(
 
   const cached = integration?.auth_config as Record<string, unknown> | null
 
-  // If we have a cached config, return it immediately
+  // If we have a cached config, return it — redact secrets before sending to browser
   if (cached && Object.keys(cached).length > 0) {
-    return NextResponse.json({ config: cached, source: 'cache' })
+    return NextResponse.json({ config: redactAuthConfig(cached), source: 'cache' })
   }
 
   // No cache — try live fetch if we have a project URL
@@ -75,14 +90,15 @@ export async function GET(
     const pat = (secrets?.secret_config as Record<string, string> | null)?.management_pat
     const config = await getAuthConfig(projectUrl, pat)
 
-    // Cache the result
+    // Cache only public fields — never persist OAuth secrets to project_integrations
+    const safeConfig = redactAuthConfig(config as Record<string, unknown>)
     await supabase
       .from('project_integrations')
-      .update({ auth_config: config })
+      .update({ auth_config: safeConfig })
       .eq('project_id', projectId)
       .eq('type', 'supabase')
 
-    return NextResponse.json({ config, source: 'live' })
+    return NextResponse.json({ config: safeConfig, source: 'live' })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Failed to fetch auth config'
     return NextResponse.json({ error: msg }, { status: 502 })

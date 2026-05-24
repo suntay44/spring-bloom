@@ -23,7 +23,8 @@ export async function GET(req: Request) {
   const state = searchParams.get('state')
   const error = searchParams.get('error')
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (!appUrl) throw new Error('NEXT_PUBLIC_APP_URL is not set — Stripe redirect will fail')
 
   if (error) {
     console.error('[stripe-connect callback] OAuth error:', error, searchParams.get('error_description'))

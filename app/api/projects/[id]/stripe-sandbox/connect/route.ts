@@ -34,7 +34,8 @@ export async function GET(
   if (!project) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const state = generateOAuthState()
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (!appUrl) return NextResponse.json({ error: 'NEXT_PUBLIC_APP_URL is not configured' }, { status: 500 })
   const redirectUri = `${appUrl}/api/auth/stripe-connect/callback`
 
   const db = createAdminClient()
