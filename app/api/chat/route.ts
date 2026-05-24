@@ -2,6 +2,7 @@ import { streamText, type UIMessage } from 'ai'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveModel } from '@/lib/ai/providers'
+import { routeModel, type BuilderMode } from '@/lib/ai/model-router'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
 import { buildContextMessages, shouldCompress, generateContextSummary } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
@@ -37,10 +38,12 @@ export async function POST(req: Request) {
     messages: UIMessage[]
     projectId: string
     modelId: string
+    mode?: BuilderMode
     attachments?: Array<{ id: string; kind: 'image' | 'csv' | 'pdf' | 'file'; storage_path: string; filename: string }>
   }
 
   const { messages, projectId, modelId } = body
+  const requestedMode: BuilderMode = body.mode ?? 'agent'
   const requestedAttachments = body.attachments ?? []
 
   if (!projectId || !modelId || !messages?.length) {
@@ -91,8 +94,15 @@ export async function POST(req: Request) {
     )
   }
 
+  // Mode-aware model routing: plan upgrades, code downgrades, agent respects user pick.
+  const routed = routeModel({
+    mode: requestedMode,
+    userModelId: modelId,
+    userProvider: modelPricing.provider,
+  })
+
   // Resolve AI model — fail gracefully if provider key is missing
-  const model = resolveModel(modelId, modelPricing.provider)
+  const model = resolveModel(routed.modelId, routed.provider)
   if (!model) {
     return NextResponse.json(
       { error: `Provider ${modelPricing.provider} is not configured on this server` },

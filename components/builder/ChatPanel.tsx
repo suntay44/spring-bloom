@@ -6,6 +6,8 @@ import { useChat } from "@ai-sdk/react";
 import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, X, Zap } from "lucide-react";
 import { MessageItem } from "@/components/builder/MessageItem";
 import { ScopingQuestionsCard } from "@/components/builder/ScopingQuestionsCard";
+import { ModeToggle } from "@/components/builder/ModeToggle";
+import type { BuilderMode } from "@/lib/ai/model-router";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
 import { shouldAskQuestions } from "@/lib/ai/ambiguity-detector";
 import type { ScopingQuestion } from "@/lib/mock/messages";
@@ -68,6 +70,7 @@ function classifyKind(mime: string, filename: string): AttachmentKind {
 export function ChatPanel({ projectId, machineId, initialMessages = [], onTabChange, onToolsOpen, onVisualEditsToggle, visualEdits }: ChatPanelProps) {
   const [buildMenuOpen, setBuildMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  const [mode, setMode] = useState<BuilderMode>("agent");
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
   const [running, setRunning] = useState(false);
@@ -104,6 +107,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
       body: {
         projectId,
         modelId: selectedModelId,
+        mode,
         attachments: attachments
           .filter((a) => !a.uploading)
           .map((a) => ({
@@ -115,7 +119,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [projectId, selectedModelId, attachmentIdsKey]
+    [projectId, selectedModelId, mode, attachmentIdsKey]
   );
   const { messages, sendMessage, status, stop, error, setMessages, clearError } = useChat({
     messages: initialMessages,
@@ -512,7 +516,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         <p className="text-xs text-slate-500">est. ~{creditEstimate.estimate} credits</p>
         <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder="Ask Wild Cupcake..." value={inputValue} />
         <div className="composer-actions">
-          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
+          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><ModeToggle mode={mode} onChange={setMode} disabled={isStreaming || running} /><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
           <div className="relative flex items-center gap-2">
             <button className="chip-btn" onClick={() => setBuildMenuOpen((current) => !current)} type="button">Build <ChevronDown size={14} /></button>
             {buildMenuOpen ? (
