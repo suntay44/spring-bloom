@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { CustomDomainsSection } from "@/components/builder/CustomDomainsSection";
 
 type PublishModalProps = {
   open: boolean;
@@ -125,6 +126,16 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
               {copied ? (
                 <span className="text-xs text-green-600">Copied!</span>
               ) : null}
+            </div>
+          ) : null}
+
+          {/* Custom domains — shown once the project is published */}
+          {phase === "done" && url ? (
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <CustomDomainsSection
+                projectId={projectId}
+                defaultCnameTarget={new URL(url).hostname}
+              />
             </div>
           ) : null}
 

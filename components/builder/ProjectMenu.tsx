@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, GitFork, Gift, Globe2, HelpCircle, KeyRound, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "@/lib/toast";
 
-export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations" | "Auth";
+export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations" | "Auth" | "SEO";
 
 export type ProjectMenuUser = {
   initials: string;
@@ -32,7 +32,7 @@ const TOOL_ITEMS = [
   { label: "Integrations", icon: Sparkles,   pinned: true,  tab: "Integrations", active: false },
   { label: "Payments",     icon: CreditCard, pinned: false, tab: "Integrations", active: false },
   { label: "Security",     icon: ShieldCheck,pinned: false, tab: "Security"      },
-  { label: "SEO & AI search", icon: Search,  pinned: false                       },
+  { label: "SEO & AI search", icon: Search,  pinned: false, tab: "SEO", active: false },
 ] satisfies Array<{ label: string; icon: ComponentType<{ size?: number }>; pinned: boolean; tab?: BuilderTab; active?: boolean }>;
 
 export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void }) {
@@ -41,7 +41,7 @@ export function MoreToolsMenu({ setTab }: { setTab: (tab: BuilderTab) => void })
       {TOOL_ITEMS.map((item) => {
         const Icon = item.icon;
         return (
-          <button className={item.active ? "active" : ""} key={item.label} onClick={() => item.tab ? setTab(item.tab) : toast(`${item.label} — coming soon`)} type="button">
+          <button className={item.active ? "active" : ""} key={item.label} onClick={() => setTab(item.tab)} type="button">
             <Icon size={16} />
             <span>{item.label}</span>
             <Pin size={14} />
