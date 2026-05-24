@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveModel } from '@/lib/ai/providers'
 import { routeModel, type BuilderMode } from '@/lib/ai/model-router'
+import { resolveKnowledge, injectKnowledge } from '@/lib/knowledge/resolver'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
 import { buildContextMessages, shouldCompress, generateContextSummary } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
   const [{ data: project }, { data: modelPricing }, { data: projectBrief }] = await Promise.all([
     supabase
       .from('projects')
-      .select('id, type, framework, design_style, primary_color, db_schema, backend_mode')
+      .select('id, type, framework, design_style, primary_color, db_schema, backend_mode, fly_machine_id')
       .eq('id', projectId)
       .eq('user_id', user.id)
       .single(),
@@ -327,7 +328,7 @@ export async function POST(req: Request) {
   void augmentedRawUserMessage
 
   // Phase 19: system prompt now includes brief context
-  const systemPrompt = buildSystemPrompt({
+  const baseSystemPrompt = buildSystemPrompt({
     projectType:   project.type,
     framework:     project.framework,
     fileTree:      [],
@@ -338,6 +339,16 @@ export async function POST(req: Request) {
     briefAnswers,
     initialPrompt: projectBrief?.initial_prompt ?? null,
   })
+
+  // Phase 21: load knowledge tiers — user prefs (DB) + project AGENTS.md (Fly machine)
+  const { data: userKnow } = await supabase
+    .from('user_knowledge').select('content, max_tokens').eq('user_id', user.id).maybeSingle()
+  const knowledge = await resolveKnowledge({
+    userKnowledge: (userKnow as { content?: string } | null)?.content ?? null,
+    machineId:     (project as { fly_machine_id?: string | null }).fly_machine_id ?? null,
+    maxChars:      6000,
+  })
+  const systemPrompt = injectKnowledge(baseSystemPrompt, knowledge)
 
   const result = streamText({
     model,
