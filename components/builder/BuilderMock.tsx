@@ -11,6 +11,7 @@ import { FilesPanel } from "@/components/builder/panels/FilesPanel";
 import { FindingsPanel } from "@/components/builder/panels/FindingsPanel";
 import { IntegrationsPanel } from "@/components/builder/panels/IntegrationsPanel";
 import { AuthProvidersPanel } from "@/components/builder/panels/AuthProvidersPanel";
+import { SecurityPanel } from "@/components/builder/panels/SecurityPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
 import { PublishModal } from "@/components/builder/PublishModal";
 import { UpgradeModal } from "@/components/builder/UpgradeModal";
@@ -21,7 +22,6 @@ import { useMachineProvisioner } from "@/hooks/useMachineProvisioner";
 import { toast } from "@/lib/toast";
 import type { MockProject, MockProjectType } from "@/lib/mock/projects";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
-import { MOCK_SECURITY_RUN } from "@/lib/mock/security";
 
 const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics", "Integrations", "Auth"] as const;
 
@@ -83,7 +83,7 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
     Files:        () => <FilesPanel machineId={machine.machineId} />,
     Diff:         () => <DiffPanel />,
     Review:       () => <FindingsPanel key="review" title="Code Review" items={MOCK_REVIEW_RUN.findings} />,
-    Security:     () => <FindingsPanel key="security" title="Security Scan" items={MOCK_SECURITY_RUN.findings} />,
+    Security:     () => <SecurityPanel projectId={project.id} />,
     Analytics:    () => <AnalyticsPanel />,
     Integrations: () => <IntegrationsPanel projectId={project.id} />,
     Auth:         () => <AuthProvidersPanel projectId={project.id} />,
