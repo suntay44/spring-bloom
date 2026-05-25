@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { toast } from "@/lib/toast"
+import { AuthScaffoldSection } from "@/components/builder/AuthScaffoldSection"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,9 @@ export function AuthProvidersPanel({ projectId }: AuthProvidersPanelProps) {
           </span>
         </div>
       )}
+
+      {/* B1: code-scaffold section — always visible (not gated on PAT) */}
+      <AuthScaffoldSection projectId={projectId} />
 
       {loading ? (
         <div className="auth-providers-loading">

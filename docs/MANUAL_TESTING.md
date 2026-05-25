@@ -561,12 +561,141 @@ Apply migration `036_deployments.sql` first.
 
 ---
 
-## 11. Things NOT Yet Tested (Known Gaps)
+## 11. Round 3 — Auth + Email Scaffolds + Security Notes + Snippets (NEW)
+
+Apply migrations `037_security_notes.sql` and `038_user_snippets.sql` first.
+
+### 11.1 Auth Scaffold (B1)
+
+**Test 11.1.1 — Section appears in Auth tab**
+- Open Auth tab on any project.
+- Expected: A violet "Scaffold auth code" card appears below the header.
+- Expand it.
+
+**Test 11.1.2 — Preview without MFA / JWT**
+- Leave checkboxes unchecked. Click **Preview**.
+- Expected: 5 files listed — `middleware.ts`, `app/auth/callback/route.ts`, `app/auth/signout/route.ts`, `lib/auth/server.ts`, `lib/auth/client.ts`.
+- Expand each and verify it uses `@supabase/ssr` patterns.
+
+**Test 11.1.3 — Preview with MFA + JWT enabled**
+- Check both **Include MFA** and **Include custom JWT claims template**.
+- Click **Preview**.
+- Expected: 7 files total — added: `app/(auth)/mfa/page.tsx`, `app/(auth)/mfa/enroll-action.ts`, `supabase/migrations/<ts>_custom_access_token_hook.sql`.
+
+**Test 11.1.4 — Apply to project**
+- Click **Apply to project** (preview must be running).
+- Expected: Green confirmation lists all written paths. Files appear in the Files panel.
+- Open `middleware.ts` — confirm `PROTECTED` array matches what you typed.
+
+**Test 11.1.5 — Protected route enforcement**
+- After applying, `npm install @supabase/ssr` in the project.
+- Visit `/dashboard` while signed out.
+- Expected: Redirected to `/login?next=/dashboard`.
+
+### 11.2 Resend Email Scaffold (B2)
+
+**Test 11.2.1 — Section only when Resend connected**
+- Open Integrations tab. Without Resend connected, no "Scaffold email templates" section.
+- Connect Resend (any API key). Refresh.
+- Expected: violet "Scaffold email templates" card appears.
+
+**Test 11.2.2 — Preview + apply**
+- Expand. Set Product name, from address, brand color.
+- Click **Preview** — expected 5 files (4 if "Include receipt template" unchecked).
+- Click **Apply**. Expected: files written to `lib/emails/templates/*.tsx`, `lib/emails/send.ts`, `lib/emails/preview.tsx`.
+
+**Test 11.2.3 — Template renders locally**
+- In the project: `npm install resend @react-email/components @react-email/render`.
+- Create `app/email-preview/page.tsx` with `import PreviewIndex from '@/lib/emails/preview'; export default PreviewIndex`.
+- Visit `/email-preview` in the project preview.
+- Expected: Welcome / Password Reset / Magic Link / Receipt templates render in iframes with sample data.
+
+**Test 11.2.4 — sendEmail() type-checks**
+- In any server file: `import { sendEmail } from '@/lib/emails/send'`.
+- Try `sendEmail({ template: 'welcome', to: 'me@example.com', props: {} })`.
+- Expected: TypeScript error — `name` is required in `props`.
+- Add `name: 'Test'` — type error gone.
+
+### 11.3 Generation-Time Security Notes (G5) — UNIQUE
+
+**Test 11.3.1 — Notes appear after AI writes RLS**
+- Send a chat message: "Add a `comments` table with RLS enabled and a policy for users to read their own."
+- Wait for the artifact to finish.
+- Query Supabase:
+  ```sql
+  SELECT pattern, title, file_path, line_start
+  FROM security_notes
+  WHERE project_id = '<project-id>'
+  ORDER BY created_at DESC LIMIT 10;
+  ```
+- Expected rows with patterns `enable_rls` and `create_policy`, file_path pointing to the migration.
+
+**Test 11.3.2 — eval() / dangerouslySetInnerHTML flagged**
+- Send: "Add a page that uses dangerouslySetInnerHTML to render user-provided HTML."
+- After generation, expect a `security_notes` row with pattern `innerhtml_assign`, category `xss`.
+
+**Test 11.3.3 — Hardcoded secret detection**
+- Send a chat asking the AI to embed `STRIPE_SECRET_KEY = 'sk_live_xxxxx'` directly in a file.
+- After generation: expect a note with pattern `hardcoded_token_like`.
+
+**Test 11.3.4 — Doesn't fire on benign code**
+- Send: "Add a simple About page with a heading and paragraph."
+- After generation: no new `security_notes` rows.
+
+**Test 11.3.5 — Cap respected**
+- Generate a file with many `eval()` calls (50+).
+- Expected: at most 50 notes inserted for this one generation.
+
+### 11.4 Snippets / Skills Library (B4)
+
+**Test 11.4.1 — Create a snippet via API**
+- In browser devtools:
+  ```js
+  await fetch('/api/user/snippets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      trigger: 'drizzle-setup',
+      label: 'Drizzle ORM standard setup',
+      description: 'Use when adding Drizzle to a new project',
+      body: 'Set up Drizzle ORM with PostgreSQL. Use the schema-first approach.',
+      tags: ['database', 'drizzle'],
+    }),
+  }).then((r) => r.json())
+  ```
+- Expected: returns `{ snippet: { id, trigger: 'drizzle-setup', ... } }`.
+
+**Test 11.4.2 — Slash command picker opens**
+- In a project chat composer, type `/`.
+- Expected: A popover appears above the composer showing your snippet ("Drizzle ORM standard setup") with the trigger badge `/drizzle-setup`.
+
+**Test 11.4.3 — Filter by typing**
+- Continue typing: `/dri`.
+- Expected: Only snippets whose trigger or label or tag contains "dri" shown.
+
+**Test 11.4.4 — Keyboard navigation**
+- With picker open, press ↓ ↓ ↑. Expected: highlight moves between rows.
+- Press Enter on a row. Expected: input value replaces with the snippet's `body`. Picker closes.
+
+**Test 11.4.5 — Use count increments**
+- After picking a snippet, refresh and re-open the picker.
+- Expected: The picked snippet shows `×1` use count and is sorted to the top by most-recently-used.
+
+**Test 11.4.6 — Duplicate trigger blocked**
+- Try POSTing a second snippet with `trigger: 'drizzle-setup'`.
+- Expected: 409 error "A snippet with this trigger already exists".
+
+**Test 11.4.7 — Trigger validation**
+- Try `trigger: 'Bad Name!'` or `trigger: 'a'` (too short).
+- Expected: 400 error "Trigger must be 2-64 chars, lowercase, kebab-case".
+
+---
+
+## 12. Things NOT Yet Tested (Known Gaps)
 
 - **Reference docs RAG** (`knowledge_docs` table) — schema exists, embedding pipeline pending.
-- **Browser testing (Playwright)** — deferred (Round 3 / sidecar Fly machine work).
-- **Generation-time security note hooks** — security_notes table not yet added.
-- **Test runner panel** — Round 3.
-- **Skills / Snippets library with `/` commands** — Round 3.
-- **Stripe Products & Prices CRUD panel** — deferred from A1 (scaffold ships first).
+- **Browser testing (Playwright)** — deferred (needs sidecar Fly machine work).
+- **Test runner panel** — pending.
+- **Stripe Products & Prices CRUD panel** — deferred from A1.
 - **Deployment rollback** — deployments table tracks history but rollback API/UI not yet built.
+- **Snippet management UI** — only `/settings/snippets` link in picker footer; no actual settings page built yet (snippets are CRUD'd via API for now).

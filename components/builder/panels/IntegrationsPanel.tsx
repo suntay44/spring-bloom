@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { AnalyticsAdaptersSection } from "@/components/builder/AnalyticsAdaptersSection"
 import { StripeScaffoldSection } from "@/components/builder/StripeScaffoldSection"
+import { EmailScaffoldSection } from "@/components/builder/EmailScaffoldSection"
 import {
   CreditCard, Database, Phone, Mail, Key,
   ChevronDown, ChevronUp, CheckCircle2, Loader2, Trash2, Plus, X,
@@ -170,6 +171,11 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
                   projectId={projectId}
                   hasSupabase={!!getIntegration("supabase")}
                 />
+              )}
+
+              {/* B2: Resend email scaffold — only when Resend is connected */}
+              {getIntegration("resend") && (
+                <EmailScaffoldSection projectId={projectId} />
               )}
 
               {INTEGRATIONS.map(def => (

@@ -6,6 +6,7 @@ import { routeModel, type BuilderMode } from '@/lib/ai/model-router'
 import { resolveKnowledge, injectKnowledge } from '@/lib/knowledge/resolver'
 import { listFilesCached } from '@/lib/fly/client'
 import { getModelPricing } from '@/lib/ai/pricing-cache'
+import { detectSecurityNotes } from '@/lib/security/generation-notes'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
 import { buildContextMessages, shouldCompress, generateContextSummary } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
@@ -459,6 +460,32 @@ export async function POST(req: Request) {
           artifactText: text,
           projectType:  project.type,
         })
+
+        // G5: detect security-relevant patterns in the generated code and
+        // persist them as security_notes. Fire-and-forget — never blocks.
+        void (async () => {
+          try {
+            const notes = detectSecurityNotes({ text })
+            if (notes.length === 0) return
+            await supabase.from('security_notes').insert(
+              notes.map((n) => ({
+                project_id:   projectId,
+                user_id:      user.id,
+                agent_run_id: agentRun.id,
+                source:       'generation',
+                category:     n.category,
+                pattern:      n.pattern,
+                title:        n.title,
+                snippet:      n.snippet,
+                file_path:    n.file_path ?? null,
+                line_start:   n.line_start ?? null,
+                line_end:     n.line_end ?? null,
+              })),
+            )
+          } catch (err) {
+            console.warn('[security-notes] insert failed:', err instanceof Error ? err.message : err)
+          }
+        })()
 
       } catch (err) {
         console.error('[chat/onFinish] Failed to finalize run:', err)

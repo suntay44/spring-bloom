@@ -7,6 +7,7 @@ import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, X, Zap } fr
 import { MessageItem } from "@/components/builder/MessageItem";
 import { ScopingQuestionsCard } from "@/components/builder/ScopingQuestionsCard";
 import { ModeToggle } from "@/components/builder/ModeToggle";
+import { SnippetPicker } from "@/components/builder/SnippetPicker";
 import type { BuilderMode } from "@/lib/ai/model-router";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
 import { shouldAskQuestions } from "@/lib/ai/ambiguity-detector";
@@ -609,6 +610,29 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
           {models.length > 0 ? models.map((model) => <option key={model.model_id} value={model.model_id}>{model.display_name}</option>) : <option value="claude-sonnet-4-5">Claude Sonnet 4.5</option>}
         </select>
         <p className="text-xs text-slate-500">est. ~{creditEstimate.estimate} credits</p>
+        {/* B4: snippet picker — shown when input starts with "/" */}
+        {inputValue.startsWith('/') && !inputValue.includes('\n') && (
+          <SnippetPicker
+            query={inputValue}
+            onPick={async (trigger) => {
+              try {
+                // Find the matching snippet then fetch its full body
+                const listRes = await fetch('/api/user/snippets')
+                const list = await listRes.json() as { snippets?: Array<{ id: string; trigger: string }> }
+                const match = list.snippets?.find((s) => s.trigger === trigger)
+                if (!match) { setInputValue(''); return }
+                const fullRes = await fetch(`/api/user/snippets/${match.id}`)
+                const full = await fullRes.json() as { snippet?: { body: string } }
+                setInputValue(full.snippet?.body ?? '')
+                // Fire-and-forget usage bump
+                void fetch(`/api/user/snippets/${match.id}?action=use`, { method: 'POST' })
+              } catch {
+                toast.error('Could not load snippet')
+              }
+            }}
+            onClose={() => { /* user keeps typing, will dismiss when slash gone */ }}
+          />
+        )}
         <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder="Ask Wild Cupcake..." value={inputValue} />
         <div className="composer-actions">
           <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><ModeToggle mode={mode} onChange={setMode} deepThink={deepThink} onDeepThinkChange={setDeepThink} disabled={isStreaming || running} /><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
