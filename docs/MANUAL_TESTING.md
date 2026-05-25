@@ -334,12 +334,146 @@ If you see unexpected spend, check the `agent_runs` table — every AI call writ
 
 ---
 
-## 8. Things NOT Yet Tested (Known Gaps)
+## 8. Round 0 — Cost Optimization (NEW)
 
-These work but weren't in scope for manual testing:
+Apply migration `035_cache_telemetry.sql` first. Set `FLY_SWEEPER_SECRET` in `.env.local`.
 
-- **PlanCard component** — built but not yet auto-rendered when a Plan-mode response arrives. Needs MessageItem to detect plan-mode messages and render PlanCard. Currently the plan markdown shows as a regular assistant message.
-- **`AGENTS.md` auto-generation** on project create — `buildAgentsMd()` exists but isn't called yet from the project provisioning flow. Users have to ask the AI to create it manually for now.
+**Test 8.1 — Anthropic prompt caching is hitting**
+- Start a chat with Claude Sonnet selected. Send 3 messages back-to-back ("hi", "add a button", "make it blue").
+- Open Supabase → `agent_runs` table → look at last 3 rows.
+- Expected: First row: `cache_creation_input_tokens > 0`, `cache_read_input_tokens` may be 0.
+- Expected: Rows 2 & 3: `cache_read_input_tokens > 0`, `cache_creation_input_tokens` may be smaller.
+- Target after a week of usage: average `cache_read / (cache_read + cache_creation + tokens_input) > 60%`.
+
+**Test 8.2 — AGENTS.md cache (no Fly wake-up every turn)**
+- With a project preview running, watch the Fly logs (`fly logs -a springbloom-builder`).
+- Send a chat message. Note the time of the `exec` call.
+- Send another within 60 seconds.
+- Expected: only ONE exec call (the first); second message reads from in-process cache.
+- After 60s+, expected: another exec call.
+
+**Test 8.3 — fileTree is now real (model knows what files exist)**
+- Open a project with several files in the Files panel.
+- Ask: "What files are in this project?"
+- Expected: Model lists actual files (e.g. `app/page.tsx`, `lib/utils.ts`), not a generic guess.
+- Before the fix: model would invent file names.
+
+**Test 8.4 — Hold estimate now includes input cost**
+- Long-running chat (>15 messages). Watch the credit estimate in the composer ("est. ~X credits").
+- Expected: Estimate grows with conversation length (was previously flat).
+- Confirm in `credit_transactions`: the hold amount should now reflect input + output.
+
+**Test 8.5 — model_pricing cache (no DB hit per turn)**
+- Open browser devtools network tab.
+- Send 5 chat messages.
+- Expected: Initial chat call may include model_pricing query; subsequent 4 should not (cache TTL = 5min).
+
+**Test 8.6 — Fly sweeper (dry run + live)**
+- In terminal:
+  ```bash
+  curl -H "Authorization: Bearer $FLY_SWEEPER_SECRET" \
+    "http://localhost:3000/api/admin/fly-sweeper?dry_run=1&days=30"
+  ```
+- Expected: JSON `{ dry_run: true, candidates: [...], count: N }`. No machines destroyed.
+- For a live test (CAREFUL): create a throwaway project, age it via `update projects set updated_at = now() - interval '40 days'`, then call without `dry_run=1`. Verify machine is destroyed in Fly dashboard.
+
+---
+
+## 9. Round 1 — Quick Wins (NEW)
+
+### 9.1 SARIF Security Export
+
+**Test 9.1.1 — Download SARIF after a scan**
+- Run a Quick scan or In-depth scan with findings (see §1).
+- A "SARIF" download chip appears next to the scan summary.
+- Click it. Expected: file `<project-slug>-security-<scanId>.sarif` downloads.
+- Open the file. Expected: JSON with `version: "2.1.0"`, `runs[0].tool.driver.name === "SpringBloom Security Scanner"`, `runs[0].results[]` matching findings.
+
+**Test 9.1.2 — GitHub Code Scanning upload**
+- In your GitHub repo Settings → Code Scanning → enable advanced setup.
+- Upload the .sarif via Security tab → Code Scanning → Tools → Upload.
+- Expected: Findings appear as PR annotations and in the Security tab.
+
+**Test 9.1.3 — Accepted-risk filtering**
+- After accepting some risks (§1.3), download the SARIF without `?include_accepted=1`.
+- Expected: Accepted findings are excluded.
+- Then download with `?include_accepted=1` appended.
+- Expected: All findings present, accepted ones marked in `properties.accepted_risk: true`.
+
+### 9.2 AGENTS.md Auto-Generation
+
+**Test 9.2.1 — Created on first machine boot**
+- Create a brand new project (or click "Start preview" on one that has no Fly machine).
+- Wait for machine provision to finish.
+- Open Files panel. Expected: `AGENTS.md` exists at project root.
+- Open it. Expected: Contains `# <Project Name>`, sections for Project / Conventions / Security Baseline / Editing Rules, plus brief Q&A if user did planning.
+
+**Test 9.2.2 — Won't clobber existing AGENTS.md**
+- Edit AGENTS.md in the project ("Use Drizzle ORM exclusively").
+- Stop and restart the project preview.
+- Open AGENTS.md again. Expected: Your edits are preserved (not regenerated).
+
+**Test 9.2.3 — Picked up by next chat turn**
+- After step 9.2.2, ask the AI: "Add a database table for posts."
+- Expected: Generated code uses Drizzle, not Prisma — proves the file was injected into the system prompt.
+
+### 9.3 BYO-Analytics Adapters
+
+**Test 9.3.1 — PostHog connect**
+- Open Integrations tab. Scroll to "Analytics — bring your own" section.
+- Click **PostHog** → expand. Paste a real PostHog Project Key (or `phc_test`).
+- Click **Connect**. Expected: green "connected" badge, toast "wrote lib/analytics/posthog.ts".
+- Open Files panel. Expected: `lib/analytics/posthog.ts` exists with the configured key.
+
+**Test 9.3.2 — Plausible connect**
+- Same as 9.3.1 but for Plausible. Field: site domain.
+- Expected: `components/analytics/PlausibleScript.tsx` written.
+
+**Test 9.3.3 — Update existing config**
+- After connecting, expand again. Change a field value. Click **Update**.
+- Expected: File rewritten with new value. Same connected state.
+
+**Test 9.3.4 — Disconnect**
+- Click **Disconnect** on a connected adapter.
+- Confirm. Expected: Toast "disconnected", file deleted from project, badge removed.
+
+**Test 9.3.5 — Required-field validation**
+- Try connecting an adapter without filling the required field (marked `*`).
+- Expected: Connect button is disabled. Hovering does not allow click.
+
+### 9.4 PlanCard Auto-Render
+
+**Test 9.4.1 — Plan-mode message renders as editable card**
+- Select **Plan** mode in the toggle. Send: "Add Stripe checkout."
+- Wait for stream to finish.
+- Expected: Within ~1s after streaming completes, the assistant message swaps from plain text to a violet PlanCard with: header showing "PLAN · draft", markdown preview, Edit / Discard / Approve & Build buttons.
+
+**Test 9.4.2 — Edit the plan markdown**
+- On the PlanCard, click **Edit**.
+- Expected: Markdown becomes editable textarea. Modify it.
+- Click **Preview** — your edits show in the formatted preview.
+
+**Test 9.4.3 — Approve & Build flow**
+- Click **Approve & Build**.
+- Expected: Plan card shows "Approved" badge. Mode toggle auto-switches to **Agent**. A new user message "Implement this plan: ..." is sent automatically.
+- Expected: Agent mode then writes the actual code.
+
+**Test 9.4.4 — Discard**
+- Send a new plan, then click **Discard**.
+- Expected: Plan card shows "Discarded" badge. No execution kicks off.
+- Send a normal Agent message — confirm chat still works.
+
+**Test 9.4.5 — Plans persist after refresh**
+- Refresh the browser page.
+- Open the project. Plan history should still show as PlanCards (not plain text), with their respective statuses.
+- Edge: a Discarded plan should still show but with no actions.
+
+---
+
+## 10. Things NOT Yet Tested (Known Gaps)
+
 - **Reference docs RAG** (`knowledge_docs` table) — schema exists, embedding pipeline pending.
-- **SARIF export** for security findings — schema supports it, route not yet built.
-- **Browser testing (Playwright)** — deferred to a later phase (needs sidecar Fly machine work).
+- **Browser testing (Playwright)** — deferred (Round 3 / sidecar Fly machine work).
+- **Generation-time security note hooks** — security_notes table not yet added.
+- **Test runner panel** — Round 3.
+- **Skills / Snippets library with `/` commands** — Round 3.
