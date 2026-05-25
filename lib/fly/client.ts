@@ -135,10 +135,49 @@ export async function writeFile(
   ])
 }
 
+// R0-8: Destroy a machine (and its root volume). Used by the TTL sweeper to
+// reclaim compute on abandoned projects. Returns true on success, false if the
+// machine was already gone (404). Throws on other errors.
+export async function destroyMachine(machineId: string): Promise<boolean> {
+  // Fly destroy requires the machine to be stopped first.
+  try { await stopMachine(machineId) } catch { /* may already be stopped */ }
+  const res = await fetch(
+    `${FLY_API_BASE}/apps/${FLY_APP_NAME}/machines/${machineId}?force=true`,
+    { method: 'DELETE', headers: headers() },
+  )
+  if (res.status === 404) return false
+  if (!res.ok) throw new Error(`Fly destroy failed: ${res.status} ${await res.text()}`)
+  return true
+}
+
 // List files in /app on the machine
 export async function listFiles(machineId: string): Promise<string[]> {
   const result = await execOnMachine(machineId, ['find', '/app', '-type', 'f', '-not', '-path', '*/node_modules/*'])
   return result.stdout.split('\n').filter(Boolean).map((f) => f.replace('/app/', ''))
+}
+
+// R0-4: cached variant — file tree changes only on writes, so a 60s TTL is fine.
+// Saves a Fly exec round-trip (wakes suspended VM) on every chat turn.
+interface FileTreeCacheEntry { files: string[]; fetchedAt: number }
+const FILE_TREE_CACHE = new Map<string, FileTreeCacheEntry>()
+const FILE_TREE_TTL_MS = 60_000
+
+export function invalidateFileTreeCache(machineId: string): void {
+  FILE_TREE_CACHE.delete(machineId)
+}
+
+export async function listFilesCached(machineId: string): Promise<string[]> {
+  const cached = FILE_TREE_CACHE.get(machineId)
+  if (cached && Date.now() - cached.fetchedAt < FILE_TREE_TTL_MS) {
+    return cached.files
+  }
+  try {
+    const files = await listFiles(machineId)
+    FILE_TREE_CACHE.set(machineId, { files, fetchedAt: Date.now() })
+    return files
+  } catch {
+    return cached?.files ?? []   // soft-fail: stale data > no data
+  }
 }
 
 // Inject (or replace) STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY in /app/.env.local.

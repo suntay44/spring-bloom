@@ -16,6 +16,18 @@
 
 import { execOnMachine } from '@/lib/fly/client'
 
+// ── In-process cache for project-level knowledge ──
+// R0-3: avoid waking the Fly machine on every chat turn just to cat AGENTS.md.
+// TTL kept short (60s) so edits flow through quickly; can be invalidated
+// explicitly via invalidateKnowledgeCache(machineId) when files change.
+interface CacheEntry { content: string; fetchedAt: number }
+const KNOWLEDGE_CACHE = new Map<string, CacheEntry>()
+const KNOWLEDGE_TTL_MS = 60_000   // 60 seconds
+
+export function invalidateKnowledgeCache(machineId: string): void {
+  KNOWLEDGE_CACHE.delete(machineId)
+}
+
 export interface ResolvedKnowledge {
   userBlock:    string         // tagged user-level prefs
   projectBlock: string         // tagged project AGENTS.md content
@@ -82,23 +94,28 @@ export function injectKnowledge(systemPrompt: string, k: ResolvedKnowledge): str
 // ─── Project-level fetch ────────────────────────────────────────────────────
 
 async function fetchProjectKnowledge(machineId: string): Promise<string> {
-  for (const candidate of KNOWLEDGE_FILE_CANDIDATES) {
-    try {
-      // Note: execOnMachine has a 30s default timeout; cat is instant. Use 5s.
-      const result = await execOnMachine(
-        machineId,
-        ['sh', '-c', `cat /app/"$1" 2>/dev/null || true`, '--', candidate],
-        '/app',
-        5,
-      )
-      if (result.stdout && result.stdout.trim().length > 0) {
-        return result.stdout
-      }
-    } catch {
-      // Try next candidate
-    }
+  // ── R0-3: serve from cache if fresh ──
+  const cached = KNOWLEDGE_CACHE.get(machineId)
+  if (cached && Date.now() - cached.fetchedAt < KNOWLEDGE_TTL_MS) {
+    return cached.content
   }
-  return ''
+
+  // Cache miss: do ONE Fly exec that tries all candidate paths in one round-trip
+  // (was previously a loop of up to 5 separate exec calls — each wakes the suspended VM).
+  const tryScript = KNOWLEDGE_FILE_CANDIDATES
+    .map(p => `[ -s /app/"${p}" ] && cat /app/"${p}" && exit 0`)
+    .join('; ') + '; exit 0'
+
+  let content = ''
+  try {
+    const result = await execOnMachine(machineId, ['sh', '-c', tryScript], '/app', 5)
+    content = result.stdout ?? ''
+  } catch {
+    content = ''
+  }
+
+  KNOWLEDGE_CACHE.set(machineId, { content, fetchedAt: Date.now() })
+  return content
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

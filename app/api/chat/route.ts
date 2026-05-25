@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveModel } from '@/lib/ai/providers'
 import { routeModel, type BuilderMode } from '@/lib/ai/model-router'
 import { resolveKnowledge, injectKnowledge } from '@/lib/knowledge/resolver'
+import { listFilesCached } from '@/lib/fly/client'
+import { getModelPricing } from '@/lib/ai/pricing-cache'
 import { buildSystemPrompt } from '@/lib/ai/system-prompt'
 import { buildContextMessages, shouldCompress, generateContextSummary } from '@/lib/ai/context-manager'
 import { getBalance, holdCredits, finalizeCredits, cancelHold } from '@/lib/credits/calculate'
@@ -53,20 +55,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'projectId, modelId, and messages are required' }, { status: 400 })
   }
 
-  // Load project + project brief in parallel
-  const [{ data: project }, { data: modelPricing }, { data: projectBrief }] = await Promise.all([
+  // Load project + project brief in parallel. R0-6: model_pricing now via
+  // 5-min in-process cache — DB hit only on cold start / cache miss.
+  const [{ data: project }, modelPricing, { data: projectBrief }] = await Promise.all([
     supabase
       .from('projects')
       .select('id, type, framework, design_style, primary_color, db_schema, backend_mode, fly_machine_id')
       .eq('id', projectId)
       .eq('user_id', user.id)
       .single(),
-    supabase
-      .from('model_pricing')
-      .select('model_id, display_name, provider, min_plan, credits_per_1m_input, credits_per_1m_output')
-      .eq('model_id', modelId)
-      .eq('is_active', true)
-      .single(),
+    getModelPricing(modelId),
     // Phase 19: load brief answers to wire into system prompt + enhancer
     supabase
       .from('project_briefs')
@@ -149,7 +147,18 @@ export async function POST(req: Request) {
     messageIndex: messages.length - 1,
   })
 
-  const estimate = estimateCredits(enhancedMessage, modelId, modelPricing.credits_per_1m_output)
+  // R0-5: include input cost so the hold reserves enough credits for long sessions.
+  // Estimate history size from message count (rough: 400 tokens/avg per recent turn).
+  const recentTurnsForEstimate = Math.min(messages.length, 8)  // mirrors VERBATIM_WINDOW
+  const historyTokenEstimate   = recentTurnsForEstimate * 400
+  const estimate = estimateCredits(
+    enhancedMessage,
+    modelId,
+    modelPricing.credits_per_1m_output,
+    0,
+    modelPricing.credits_per_1m_input,
+    historyTokenEstimate,
+  )
   if (balance < estimate.min) {
     return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 })
   }
@@ -315,7 +324,12 @@ export async function POST(req: Request) {
     return m
   })
 
-  const contextMessages = buildContextMessages(messagesForContext, contextSummary, [])
+  // R0-4: fetch real file tree (cached 60s) so the model sees what already exists.
+  // Previously [] was passed → model regenerated files it didn't know existed → wasted tokens.
+  const machineIdForFiles = (project as { fly_machine_id?: string | null }).fly_machine_id ?? null
+  const projectFileTree = machineIdForFiles ? await listFilesCached(machineIdForFiles) : []
+
+  const contextMessages = buildContextMessages(messagesForContext, contextSummary, projectFileTree)
 
   // Multimodal: attach image parts to the final user message for vision-capable models.
   const imageAttachments = loadedAttachments.filter((a) => a.kind === 'image')
@@ -337,7 +351,7 @@ export async function POST(req: Request) {
   const baseSystemPrompt = buildSystemPrompt({
     projectType:   project.type,
     framework:     project.framework,
-    fileTree:      [],
+    fileTree:      projectFileTree,
     designStyle:   project.design_style,
     primaryColor:  project.primary_color,
     dbSchema:      project.db_schema,
@@ -356,14 +370,36 @@ export async function POST(req: Request) {
   })
   const systemPrompt = injectKnowledge(baseSystemPrompt, knowledge)
 
+  // ── Prompt caching (R0-1) ─────────────────────────────────────────────
+  // Anthropic: mark the system prefix as ephemeral so subsequent turns
+  //   read from cache at ~10% of normal input cost.
+  // OpenAI: caching is automatic when prefixes are stable >1024 tokens
+  //   (no explicit marker needed) — restructure ensures stability.
+  // Google: no caching marker needed; Gemini reuses recent context internally.
+  // For non-Anthropic providers the providerOptions is silently ignored.
+  const cachedSystemMessage = {
+    role: 'system' as const,
+    content: systemPrompt,
+    providerOptions: {
+      anthropic: { cacheControl: { type: 'ephemeral' as const } },
+    },
+  }
+
   const result = streamText({
     model,
-    system: systemPrompt,
-    messages: contextMessages,
-    onFinish: async ({ totalUsage, text }) => {
+    messages: [cachedSystemMessage, ...contextMessages],
+    onFinish: async ({ totalUsage, text, providerMetadata }) => {
       try {
         const tokensInput  = totalUsage.inputTokens ?? 0
         const tokensOutput = totalUsage.outputTokens ?? 0
+        // R0-7: persist Anthropic cache telemetry so we can measure hit rate.
+        // providerMetadata.anthropic shape: { cacheCreationInputTokens, cacheReadInputTokens }
+        const anthMeta = (providerMetadata?.anthropic ?? {}) as {
+          cacheCreationInputTokens?: number
+          cacheReadInputTokens?:     number
+        }
+        const cacheCreation = anthMeta.cacheCreationInputTokens ?? 0
+        const cacheRead     = anthMeta.cacheReadInputTokens ?? 0
 
         const actualCredits = await finalizeCredits(
           user.id,
@@ -392,6 +428,8 @@ export async function POST(req: Request) {
             final_credits: actualCredits,
             tokens_input:  tokensInput,
             tokens_output: tokensOutput,
+            cache_creation_input_tokens: cacheCreation,
+            cache_read_input_tokens:     cacheRead,
             finished_at:   new Date().toISOString(),
           }).eq('id', agentRun.id),
         ])
