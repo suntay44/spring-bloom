@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { createMachine, startMachine, getMachine, execOnMachine } from '@/lib/fly/client'
 import { machineRateLimit } from '@/lib/rate-limit'
+import { bootstrapProjectKnowledge } from '@/lib/knowledge/bootstrap'
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -79,6 +80,9 @@ export async function POST(req: Request) {
     await startMachine(machine.id)
     await getMachine(machine.id)
     await injectSupabaseEnv(machine.id, supabase, user.id)
+    // G2: bootstrap AGENTS.md so the builder + Cursor/Claude Code see project
+    // conventions from turn 1. Best-effort, won't fail machine creation.
+    await bootstrapProjectKnowledge(supabase, machine.id, projectId)
   } catch {
     // Injection is best-effort — don't fail machine creation
   }

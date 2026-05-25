@@ -72,6 +72,9 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   const [inputValue, setInputValue] = useState("");
   const [mode, setMode] = useState<BuilderMode>("agent");
   const [deepThink, setDeepThink] = useState(false);
+  // G1: tracks plans for plan-mode messages so MessageItem can render PlanCard.
+  // Keyed by message_id; populated after streaming completes for plan-mode runs.
+  const [planMap, setPlanMap] = useState<Record<string, { planId: string; status: 'draft' | 'approved' | 'discarded' | 'executed' }>>({});
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
   const [running, setRunning] = useState(false);
@@ -172,6 +175,72 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
       });
     }
   }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // G1: after a plan-mode message finishes streaming, fetch the persisted
+  // plan rows and map them by message_id so MessageItem can render PlanCard.
+  useEffect(() => {
+    if (status !== 'ready' || mode !== 'plan' || !messages.length) return
+    const last = messages[messages.length - 1]
+    if (last?.role !== 'assistant') return
+    // Skip if we already have a plan mapped for this message id
+    if (planMap[last.id]) return
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/plans?limit=10`)
+        if (!res.ok) return
+        const data = await res.json() as { plans?: Array<{ id: string; message_id: string | null; status: 'draft' | 'approved' | 'discarded' | 'executed' }> }
+        if (cancelled) return
+        // Build the full map from server truth (covers reloads + multi-plan history)
+        const next: typeof planMap = {}
+        for (const p of data.plans ?? []) {
+          if (p.message_id) next[p.message_id] = { planId: p.id, status: p.status }
+        }
+        setPlanMap(next)
+      } catch { /* non-fatal */ }
+    })()
+    return () => { cancelled = true }
+  }, [status, mode, messages, projectId])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleApprovePlan(planId: string, edited: string) {
+    try {
+      await fetch(`/api/projects/${projectId}/plans/${planId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edited_markdown: edited, status: 'approved' }),
+      })
+      setPlanMap((prev) => {
+        const out = { ...prev }
+        for (const [msgId, info] of Object.entries(out)) {
+          if (info.planId === planId) out[msgId] = { ...info, status: 'approved' }
+        }
+        return out
+      })
+      // Auto-switch to Agent mode and resend the (possibly edited) plan
+      // as the next user prompt so execution kicks off immediately.
+      setMode('agent')
+      const prompt = `Implement this plan:\n\n${edited}`
+      void sendMessage({ text: prompt })
+    } catch {
+      toast.error('Could not approve plan')
+    }
+  }
+
+  function handleDiscardPlan(planId: string) {
+    void fetch(`/api/projects/${projectId}/plans/${planId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'discarded' }),
+    })
+    setPlanMap((prev) => {
+      const out = { ...prev }
+      for (const [msgId, info] of Object.entries(out)) {
+        if (info.planId === planId) out[msgId] = { ...info, status: 'discarded' }
+      }
+      return out
+    })
+  }
 
   useEffect(() => {
     if (status !== 'ready' || !machineId || !messages.length) return
@@ -410,7 +479,31 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
     <aside className="conversation-pane">
       <div className="conversation-scroll">
         <div className="build-stamp"><span>May 15 at 2:45 PM</span><div className="mini-preview">PRD approved</div></div>
-        {messages.map((message) => <MessageItem key={message.id} message={message} />)}
+        {messages.map((message) => {
+          const plan = planMap[message.id]
+          // G1: when this message has a tracked plan, wrap it with mode/planId
+          // so MessageItem renders <PlanCard> instead of plain text.
+          if (plan && message.role === 'assistant') {
+            const text = message.parts.find((p) => p.type === 'text')?.text ?? ''
+            const decorated = {
+              id:          message.id,
+              role:        'assistant' as const,
+              content:     text,
+              mode:        'plan' as const,
+              planId:      plan.planId,
+              planStatus:  plan.status,
+            }
+            return (
+              <MessageItem
+                key={message.id}
+                message={decorated}
+                onApprovePlan={handleApprovePlan}
+                onDiscardPlan={handleDiscardPlan}
+              />
+            )
+          }
+          return <MessageItem key={message.id} message={message} />
+        })}
 
         {/* Planning state — shown when generating or displaying questions */}
         {planningState === 'loading' && (

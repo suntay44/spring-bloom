@@ -415,24 +415,40 @@ export async function POST(req: Request) {
           estimate.estimate
         )
 
-        await Promise.all([
-          supabase.from('messages').insert({
-            project_id:   projectId,
-            role:         'assistant',
-            content:      text,
-            model_id:     modelId,
-            credits_used: actualCredits,
-          }),
-          supabase.from('agent_runs').update({
-            status:        'completed',
-            final_credits: actualCredits,
-            tokens_input:  tokensInput,
-            tokens_output: tokensOutput,
-            cache_creation_input_tokens: cacheCreation,
-            cache_read_input_tokens:     cacheRead,
-            finished_at:   new Date().toISOString(),
-          }).eq('id', agentRun.id),
-        ])
+        // G1: persist assistant message with its mode so MessageItem can
+        // render PlanCard for plan-mode outputs.
+        const { data: assistantMessageRow } = await supabase.from('messages').insert({
+          project_id:   projectId,
+          role:         'assistant',
+          content:      text,
+          model_id:     modelId,
+          credits_used: actualCredits,
+          mode:         requestedMode,
+        }).select('id').single()
+
+        // G1: if this was a plan-mode message, store it in the plans table
+        // so the UI can show approve/discard actions and track status.
+        if (requestedMode === 'plan' && assistantMessageRow) {
+          await supabase.from('plans').insert({
+            project_id:    projectId,
+            user_id:       user.id,
+            message_id:    (assistantMessageRow as { id: string }).id,
+            markdown:      text,
+            status:        'draft',
+            input_tokens:  tokensInput,
+            output_tokens: tokensOutput,
+          })
+        }
+
+        await supabase.from('agent_runs').update({
+          status:        'completed',
+          final_credits: actualCredits,
+          tokens_input:  tokensInput,
+          tokens_output: tokensOutput,
+          cache_creation_input_tokens: cacheCreation,
+          cache_read_input_tokens:     cacheRead,
+          finished_at:   new Date().toISOString(),
+        }).eq('id', agentRun.id)
 
         // Phase 19: fire-and-forget fingerprinting — never blocks the response
         void trackBuild({

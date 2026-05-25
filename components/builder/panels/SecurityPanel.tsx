@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import {
   AlertOctagon, AlertTriangle, Check, ChevronDown, ChevronRight,
-  ExternalLink, Info, Loader2, Package, RefreshCw, ShieldAlert, ShieldCheck, Sparkles,
+  Download, ExternalLink, Info, Loader2, Package, RefreshCw, ShieldAlert, ShieldCheck, Sparkles,
 } from "lucide-react"
 import { toast } from "@/lib/toast"
 import type { SecurityFinding, SecurityScan, Severity, Scanner } from "@/lib/security/types"
@@ -154,10 +154,21 @@ export function SecurityPanel({ projectId }: { projectId: string }) {
           </button>
         </div>
         {scan && (
-          <p className="text-[10px] text-zinc-600 mt-2">
-            Last scan: {new Date(scan.created_at).toLocaleString()} ·{' '}
-            {scan.scan_type === 'in_depth' ? 'In-depth' : 'Quick'} · {scan.findings_count} finding{scan.findings_count === 1 ? '' : 's'}
-          </p>
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <p className="text-[10px] text-zinc-600">
+              Last scan: {new Date(scan.created_at).toLocaleString()} ·{' '}
+              {scan.scan_type === 'in_depth' ? 'In-depth' : 'Quick'} · {scan.findings_count} finding{scan.findings_count === 1 ? '' : 's'}
+            </p>
+            <a
+              href={`/api/projects/${projectId}/security/export.sarif`}
+              className="flex items-center gap-1 text-[10px] text-zinc-500 hover:text-violet-300 px-1.5 py-0.5 rounded hover:bg-violet-500/10 transition-colors"
+              title="Download SARIF — for GitHub Code Scanning, Semgrep, CodeQL"
+              download
+            >
+              <Download size={10} />
+              SARIF
+            </a>
+          </div>
         )}
       </div>
 

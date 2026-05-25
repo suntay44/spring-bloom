@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { AnalyticsAdaptersSection } from "@/components/builder/AnalyticsAdaptersSection"
 import {
   CreditCard, Database, Phone, Mail, Key,
   ChevronDown, ChevronUp, CheckCircle2, Loader2, Trash2, Plus, X,
@@ -185,6 +186,9 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
                 onRemoved={load}
               />
             </div>
+
+            {/* ── BYO Analytics adapters (B5) ── */}
+            <AnalyticsAdaptersSection projectId={projectId} />
 
             {/* ── Cost estimate ── */}
             <CostCalculator hasSupabase={!!getIntegration("supabase")} hasStripe={!!getIntegration("stripe")} hasResend={!!getIntegration("resend")} hasTwilio={!!getIntegration("twilio")} />

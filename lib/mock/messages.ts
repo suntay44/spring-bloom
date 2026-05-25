@@ -25,6 +25,9 @@ export type MockMessage =
       content: string;
       artifacts?: MockArtifact[];
       questions?: never;
+      mode?: "plan" | "agent" | "code";
+      planId?: string;
+      planStatus?: "draft" | "approved" | "executed" | "discarded";
     }
   | {
       id: string;
@@ -32,6 +35,9 @@ export type MockMessage =
       content: string;
       questions: ScopingQuestion[];
       artifacts?: never;
+      mode?: never;
+      planId?: never;
+      planStatus?: never;
     };
 
 export const MOCK_MESSAGES: MockMessage[] = [
