@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Copy, Loader2, Terminal } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,37 +18,76 @@ type PublishModalProps = {
   projectId: string;
 };
 
-type Phase = "idle" | "publishing" | "done" | "error";
+type Phase = "idle" | "cloudflare" | "build" | "uploading" | "deploy" | "done" | "error";
+
+interface BuildEvent {
+  stdout:      string;
+  stderr:      string;
+  exit_code:   number;
+  duration_ms: number;
+}
+
+interface FilesEvent { count: number; total_bytes: number }
+interface DeployEvent { url: string; deployment_id: string; file_count: number }
+interface DoneEvent { success: boolean; url: string; deployment_id: string; total_duration_ms: number }
 
 export function PublishModal({ open, onOpenChange, projectId }: PublishModalProps) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [url, setUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [phaseMessage, setPhaseMessage] = useState<string>("");
+  const [buildEvent, setBuildEvent] = useState<BuildEvent | null>(null);
+  const [filesEvent, setFilesEvent] = useState<FilesEvent | null>(null);
+  const [logsOpen, setLogsOpen] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const inFlight = phase === "publishing";
+  const inFlight = !["idle", "done", "error"].includes(phase);
 
   async function startPublish() {
-    setPhase("publishing");
+    setPhase("cloudflare");
+    setPhaseMessage("Starting publish...");
     setErrorMsg(null);
     setUrl(null);
+    setBuildEvent(null);
+    setFilesEvent(null);
+
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     try {
-      const res = await fetch("/api/publish", {
-        method: "POST",
+      const res = await fetch("/api/publish/stream", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId }),
+        body:    JSON.stringify({ projectId }),
+        signal:  ac.signal,
       });
-      const data = (await res.json()) as { url?: string; error?: string; detail?: string };
-      if (!res.ok || !data.url) {
-        setErrorMsg(data.detail ?? data.error ?? "Publish failed");
+
+      if (!res.ok || !res.body) {
+        const errBody = await res.json().catch(() => ({ error: "Publish failed" })) as { error?: string };
+        setErrorMsg(errBody.error ?? "Publish failed");
         setPhase("error");
         return;
       }
-      setUrl(data.url);
-      setPhase("done");
-    } catch {
-      setErrorMsg("Network error — could not reach the publish service");
+
+      await consumeSse(res.body, {
+        onPhase: (data) => {
+          setPhase(data.phase as Phase);
+          setPhaseMessage(data.message);
+        },
+        onBuild:  (data) => { setBuildEvent(data); if (data.exit_code !== 0) setLogsOpen(true); },
+        onFiles:  (data) => setFilesEvent(data),
+        onDeploy: (data) => setUrl(data.url),
+        onDone:   (data) => { setUrl(data.url); setPhase("done"); },
+        onError:  (data) => { setErrorMsg(data.message); setPhase("error"); setLogsOpen(true); },
+      });
+    } catch (err) {
+      if (ac.signal.aborted) return;
+      const msg = err instanceof Error ? err.message : "Network error";
+      setErrorMsg(msg);
       setPhase("error");
+    } finally {
+      abortRef.current = null;
     }
   }
 
@@ -60,14 +99,16 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
   }
 
   function handleOpenChange(next: boolean) {
-    // Non-dismissable while the request is in flight
     if (inFlight) return;
     if (!next) {
-      // Reset on close so the next open starts fresh
       setPhase("idle");
       setUrl(null);
       setErrorMsg(null);
       setCopied(false);
+      setBuildEvent(null);
+      setFilesEvent(null);
+      setLogsOpen(false);
+      setPhaseMessage("");
     }
     onOpenChange(next);
   }
@@ -83,53 +124,86 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
         </DialogHeader>
 
         <div className="flex flex-col gap-4 py-2">
+          {/* Progress steps */}
           <ol className="flex flex-col gap-2 text-sm">
-            <StepRow
-              label="Building"
-              active={inFlight}
-              done={phase === "done"}
-            />
-            <StepRow
-              label="Uploading"
-              active={inFlight}
-              done={phase === "done"}
-            />
-            <StepRow
-              label="Live"
-              active={false}
-              done={phase === "done"}
-            />
+            <StepRow label="Cloudflare project"
+              active={phase === "cloudflare"}
+              done={["build", "uploading", "deploy", "done"].includes(phase)} />
+            <StepRow label="Build"
+              active={phase === "build"}
+              done={["uploading", "deploy", "done"].includes(phase)} />
+            <StepRow label="Upload"
+              active={phase === "uploading"}
+              done={["deploy", "done"].includes(phase)} />
+            <StepRow label="Deploy"
+              active={phase === "deploy"}
+              done={phase === "done"} />
           </ol>
 
+          {/* Live phase status */}
+          {inFlight && phaseMessage && (
+            <p className="text-xs text-muted-foreground italic">{phaseMessage}</p>
+          )}
+
+          {/* Build/file stats */}
+          {(buildEvent || filesEvent) && (
+            <div className="rounded-md border bg-muted/30 p-2.5 space-y-1 text-xs">
+              {buildEvent && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Build</span>
+                  <span className={buildEvent.exit_code === 0 ? "text-green-600" : "text-red-500"}>
+                    {buildEvent.exit_code === 0 ? "succeeded" : `exited ${buildEvent.exit_code}`} · {(buildEvent.duration_ms / 1000).toFixed(1)}s
+                  </span>
+                </div>
+              )}
+              {filesEvent && (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Bundle</span>
+                  <span>{filesEvent.count} files · {formatBytes(filesEvent.total_bytes)}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Collapsible build log */}
+          {buildEvent && (
+            <div className="rounded-md border overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setLogsOpen((o) => !o)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-muted/40 text-xs"
+              >
+                <span className="flex items-center gap-1.5 text-muted-foreground">
+                  <Terminal size={11} /> Build log
+                </span>
+                {logsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+              {logsOpen && (
+                <pre className="border-t bg-black/80 text-zinc-200 px-3 py-2 text-[10.5px] font-mono leading-relaxed overflow-x-auto max-h-64">
+                  {(buildEvent.stdout || buildEvent.stderr || "(no output)").trim()}
+                </pre>
+              )}
+            </div>
+          )}
+
+          {/* Success state */}
           {phase === "done" && url ? (
             <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
               <span className="text-xs text-muted-foreground">Your app is live at</span>
               <div className="flex items-center gap-2">
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 truncate text-sm font-medium text-primary underline"
-                >
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                  className="flex-1 truncate text-sm font-medium text-primary underline">
                   {url}
                 </a>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={handleCopy}
-                  aria-label="Copy published URL"
-                >
+                <Button type="button" variant="outline" size="icon-sm" onClick={handleCopy} aria-label="Copy published URL">
                   {copied ? <Check size={14} /> : <Copy size={14} />}
                 </Button>
               </div>
-              {copied ? (
-                <span className="text-xs text-green-600">Copied!</span>
-              ) : null}
+              {copied ? <span className="text-xs text-green-600">Copied!</span> : null}
             </div>
           ) : null}
 
-          {/* Custom domains — shown once the project is published */}
+          {/* Custom domains */}
           {phase === "done" && url ? (
             <div className="rounded-lg border bg-muted/20 p-3">
               <CustomDomainsSection
@@ -139,17 +213,17 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
             </div>
           ) : null}
 
+          {/* Error */}
           {phase === "error" && errorMsg ? (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               {errorMsg}
             </div>
           ) : null}
 
+          {/* Actions */}
           <div className="flex justify-end gap-2">
             {phase === "idle" ? (
-              <Button type="button" onClick={startPublish}>
-                Publish
-              </Button>
+              <Button type="button" onClick={startPublish}>Publish</Button>
             ) : null}
             {inFlight ? (
               <Button type="button" disabled>
@@ -157,16 +231,10 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
               </Button>
             ) : null}
             {phase === "error" ? (
-              <Button type="button" onClick={startPublish}>
-                Retry
-              </Button>
+              <Button type="button" onClick={startPublish}>Retry</Button>
             ) : null}
             {phase === "done" ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleOpenChange(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
                 Done
               </Button>
             ) : null}
@@ -177,15 +245,65 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
   );
 }
 
-function StepRow({
-  label,
-  active,
-  done,
-}: {
-  label: string;
-  active: boolean;
-  done: boolean;
-}) {
+// ─── SSE consumer ───────────────────────────────────────────────────────────
+
+interface SseHandlers {
+  onPhase:  (d: { phase: string; message: string }) => void
+  onBuild:  (d: BuildEvent) => void
+  onFiles:  (d: FilesEvent) => void
+  onDeploy: (d: DeployEvent) => void
+  onDone:   (d: DoneEvent) => void
+  onError:  (d: { message: string; detail?: string }) => void
+}
+
+async function consumeSse(body: ReadableStream<Uint8Array>, h: SseHandlers): Promise<void> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+
+    // SSE events are separated by a blank line
+    let idx: number
+    while ((idx = buffer.indexOf("\n\n")) >= 0) {
+      const raw = buffer.slice(0, idx)
+      buffer = buffer.slice(idx + 2)
+
+      let event = "message"
+      let dataText = ""
+      for (const line of raw.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim()
+        else if (line.startsWith("data:")) dataText += line.slice(5).trim()
+      }
+      if (!dataText) continue
+
+      let data: unknown
+      try { data = JSON.parse(dataText) } catch { continue }
+
+      switch (event) {
+        case "phase":  h.onPhase(data as { phase: string; message: string }); break
+        case "build":  h.onBuild(data as BuildEvent); break
+        case "files":  h.onFiles(data as FilesEvent); break
+        case "deploy": h.onDeploy(data as DeployEvent); break
+        case "done":   h.onDone(data as DoneEvent); break
+        case "error":  h.onError(data as { message: string }); break
+      }
+    }
+  }
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(2)} MB`
+}
+
+// ─── Step row ───────────────────────────────────────────────────────────────
+
+function StepRow({ label, active, done }: { label: string; active: boolean; done: boolean }) {
   return (
     <li className="flex items-center gap-2">
       {done ? (
@@ -195,15 +313,7 @@ function StepRow({
       ) : (
         <span className="size-4 rounded-full border" />
       )}
-      <span
-        className={
-          done
-            ? "text-foreground"
-            : active
-              ? "text-foreground"
-              : "text-muted-foreground"
-        }
-      >
+      <span className={done ? "text-foreground" : active ? "text-foreground" : "text-muted-foreground"}>
         {label}
       </span>
     </li>

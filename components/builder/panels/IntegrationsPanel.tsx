@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { AnalyticsAdaptersSection } from "@/components/builder/AnalyticsAdaptersSection"
+import { StripeScaffoldSection } from "@/components/builder/StripeScaffoldSection"
 import {
   CreditCard, Database, Phone, Mail, Key,
   ChevronDown, ChevronUp, CheckCircle2, Loader2, Trash2, Plus, X,
@@ -162,6 +163,14 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
                 sandbox={sandbox}
                 onProvisioned={() => { void loadSandbox() }}
               />
+
+              {/* A1: Stripe webhook scaffold — only when Stripe is connected */}
+              {getIntegration("stripe") && (
+                <StripeScaffoldSection
+                  projectId={projectId}
+                  hasSupabase={!!getIntegration("supabase")}
+                />
+              )}
 
               {INTEGRATIONS.map(def => (
                 <IntegrationCard

@@ -470,10 +470,103 @@ Apply migration `035_cache_telemetry.sql` first. Set `FLY_SWEEPER_SECRET` in `.e
 
 ---
 
-## 10. Things NOT Yet Tested (Known Gaps)
+## 10. Round 2 — Stripe Webhook Scaffold + Streamed Publish (NEW)
+
+Apply migration `036_deployments.sql` first.
+
+### 10.1 Stripe Webhook Scaffold (A1)
+
+**Test 10.1.1 — Button visible only when Stripe is connected**
+- Open Integrations tab on a project without Stripe connected.
+- Expected: No "Scaffold webhook handler" section visible.
+- Connect Stripe (any keys work — they're validated, not used here).
+- Refresh. Expected: Violet "Scaffold webhook handler" section appears above the integration cards.
+
+**Test 10.1.2 — Preview without applying**
+- Expand the section. Click **Preview**.
+- Expected: 3 or 4 files listed (4 if Supabase also connected):
+  - `app/api/webhooks/stripe/route.ts`
+  - `lib/stripe/server.ts`
+  - `lib/stripe/events.ts`
+  - `supabase/migrations/<ts>_stripe_events.sql` (only if Supabase connected)
+- Click each to expand the content. Verify:
+  - `route.ts` includes `stripe.webhooks.constructEvent` for signature verification
+  - `route.ts` includes idempotency check via `stripe_events` table (if Supabase)
+  - `events.ts` has typed handlers per event
+  - Migration creates `stripe_events` with `id text primary key`
+
+**Test 10.1.3 — Apply writes files to Fly machine**
+- Click **Apply to project** (preview must be running).
+- Expected: Green panel "Wrote 3-4 files" with each path listed.
+- Open Files panel. Confirm all the files exist at the listed paths.
+- Open `app/api/webhooks/stripe/route.ts` — verify it compiles (no red squigglies after `npm install stripe @supabase/supabase-js`).
+
+**Test 10.1.4 — No Supabase = no idempotency migration**
+- Disconnect Supabase integration.
+- Click **Preview** again.
+- Expected: Now only 3 files. Description shows "(no idempotency — connect Supabase to add it)".
+- `route.ts` content no longer has the duplicate-event check.
+
+**Test 10.1.5 — End-to-end with stripe-cli**
+- Apply scaffold to a connected project.
+- In terminal: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` — note the `whsec_` it prints.
+- Add to project's `.env.local`: `STRIPE_WEBHOOK_SECRET=whsec_...`.
+- Trigger: `stripe trigger checkout.session.completed`.
+- Expected: Webhook returns 200, log shows `[stripe] checkout.session.completed: cs_test_xxx`.
+- Trigger same event id twice (Stripe replays automatically) — expected: 2nd response is `{ received: true, duplicate: true }`.
+
+### 10.2 Streamed Publish (C2)
+
+**Test 10.2.1 — Phase progress shows live**
+- Open a built project. Click **Publish** in the toolbar.
+- Expected: Modal opens. Click **Publish** button.
+- Expected: 4 step rows appear: Cloudflare project → Build → Upload → Deploy.
+- Each row goes from `○` (pending) → spinning loader (active) → ✓ (done) in real-time as the publish progresses.
+- An italic phase message ("Running npm run build inside your project...") shows below the steps.
+
+**Test 10.2.2 — Build stats appear after build phase**
+- Mid-publish, the Build / Bundle stats card appears showing:
+  - "Build succeeded · 4.2s"
+  - "Bundle 12 files · 234 KB"
+
+**Test 10.2.3 — Build log toggle**
+- Click "Build log" chevron.
+- Expected: Black console panel expands, shows actual `npm run build` stdout from the Fly machine.
+- Auto-expands on build failure (exit_code !== 0).
+
+**Test 10.2.4 — Deployment row persisted**
+- After a successful publish, query Supabase:
+  ```sql
+  SELECT id, status, build_duration_ms, bundle_size_bytes, file_count, published_url
+  FROM deployments
+  WHERE project_id = '<project-id>'
+  ORDER BY created_at DESC LIMIT 5;
+  ```
+- Expected: New row with `status='success'`, populated stats.
+
+**Test 10.2.5 — Failed build is recorded**
+- Intentionally break the project (delete `app/page.tsx` or add `throw new Error()` in package.json's build script).
+- Publish.
+- Expected: Build step fails (red), build log auto-opens showing the error.
+- `deployments` row has `status='failed'`, `error_message`, full `build_log`.
+
+**Test 10.2.6 — Custom domains still work post-publish**
+- After successful publish, the Custom Domains section appears (existing flow).
+- Add a domain — verify the CNAME target matches the published URL.
+
+**Test 10.2.7 — Network error handling**
+- Stop the dev server mid-publish (kill `npm run dev`).
+- Modal shows error state with retry button. Restart server, click Retry.
+- Expected: Publish starts fresh.
+
+---
+
+## 11. Things NOT Yet Tested (Known Gaps)
 
 - **Reference docs RAG** (`knowledge_docs` table) — schema exists, embedding pipeline pending.
 - **Browser testing (Playwright)** — deferred (Round 3 / sidecar Fly machine work).
 - **Generation-time security note hooks** — security_notes table not yet added.
 - **Test runner panel** — Round 3.
 - **Skills / Snippets library with `/` commands** — Round 3.
+- **Stripe Products & Prices CRUD panel** — deferred from A1 (scaffold ships first).
+- **Deployment rollback** — deployments table tracks history but rollback API/UI not yet built.
