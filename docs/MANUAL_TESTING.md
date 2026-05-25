@@ -104,32 +104,48 @@ Restart `npm run dev` after any env change.
 
 ### Plan Mode
 
-**Test 2.2 — Plan mode produces a plan, not code**
+**Test 2.2 — Plan mode produces a plan, not code (default = same model)**
 - Click **Plan** in the toggle (violet active state).
-- Send: "Add Stripe checkout to my landing page."
+- Notice the "Deep think" checkbox + (i) info icon appear next to the toggle.
+- Leave Deep think OFF. Send: "Add Stripe checkout to my landing page."
 - Expected: Assistant response is a markdown plan (files to touch, steps, considerations) — NOT artifact code.
-- Expected: Cost is higher (~4× normal) because we route to Opus/GPT-5/Gemini-Pro.
+- Expected: **Cost is the SAME as a normal message** — same model as Agent, just a planning-focused prompt.
 
-**Test 2.3 — Plan is editable then approvable** (manual rendering needed if PlanCard not wired into MessageItem yet)
+**Test 2.3 — Deep think info tooltip**
+- Hover (or click) the (i) icon next to "Deep think".
+- Expected: Tooltip appears showing:
+  - "Routes your plan through a reasoning-tier model"
+  - "Costs ~5× a normal message — only use for non-trivial planning"
+  - Hint to use it for DB schema design, migrations, refactors.
+- Move the cursor away — tooltip disappears.
+
+**Test 2.4 — Deep think upgrades to reasoning model**
+- Tick the "Deep think" checkbox (turns violet).
+- Send: "Design the database schema for a multi-tenant SaaS with row-level isolation."
+- Expected: Response takes longer (~15-25s), uses Opus / GPT-5 / Gemini 2.5 Pro depending on selected provider.
+- Expected: ~5× the cost of a normal message (visible in agent_runs row).
+- Untick the checkbox — next message goes back to your normal model.
+
+**Test 2.5 — Plan is editable then approvable** (manual rendering needed if PlanCard not wired into MessageItem yet)
 - [ ] In a follow-up, edit the plan markdown.
 - [ ] Click **Approve & Build**.
 - Expected: Mode auto-switches back to Agent and execution begins.
 
 ### Code Mode
 
-**Test 2.4 — Code mode uses Haiku/cheap model**
+**Test 2.6 — Code mode uses Haiku/cheap model**
 - Click **Code** (amber active state).
 - Send: "Change the button background to red."
 - Expected: Response is faster (~half the time), shorter, diff-focused.
 - Expected: Cost is ~1/5 normal.
 
-**Test 2.5 — Model selector still works across modes**
+**Test 2.7 — Model selector still works across modes**
 - Switch user model to Gemini/OpenAI.
-- Switch mode to Plan.
-- Expected: Plan mode uses the matching provider's reasoning model (Gemini Pro / GPT-5 Pro), not Anthropic.
+- Switch mode to Plan with Deep think ON.
+- Expected: Deep think routes to the matching provider's reasoning model (Gemini 2.5 Pro / GPT-5), not Anthropic.
 
-**Test 2.6 — Mode persists during streaming**
-- [ ] Toggle is disabled while a message is streaming.
+**Test 2.8 — Toggle is disabled during streaming**
+- [ ] While a message is streaming, the mode toggle and Deep think checkbox are disabled.
 
 ---
 
@@ -305,7 +321,8 @@ Watch your AI spend in real-time:
 | Quick security scan | $0 |
 | In-depth security scan | ~$0.03 (~1 credit) |
 | Agent mode message | Same as before |
-| Plan mode message | ~$0.20-0.30 (~7-10 credits) — Opus is expensive |
+| **Plan mode (default — Deep think OFF)** | **Same as Agent — same model, planning prompt** |
+| **Plan mode + Deep think ON** | **~5× normal (~7-10 credits) — Opus/GPT-5/Gemini 2.5 Pro** |
 | Code mode message | ~⅕ of agent cost |
 | Chat with no user knowledge set | Same as before |
 | Chat with 1500-char user knowledge | +~$0.005 per turn |

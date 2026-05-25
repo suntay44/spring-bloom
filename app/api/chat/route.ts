@@ -40,11 +40,13 @@ export async function POST(req: Request) {
     projectId: string
     modelId: string
     mode?: BuilderMode
+    deepThink?: boolean
     attachments?: Array<{ id: string; kind: 'image' | 'csv' | 'pdf' | 'file'; storage_path: string; filename: string }>
   }
 
   const { messages, projectId, modelId } = body
   const requestedMode: BuilderMode = body.mode ?? 'agent'
+  const requestedDeepThink: boolean = !!body.deepThink
   const requestedAttachments = body.attachments ?? []
 
   if (!projectId || !modelId || !messages?.length) {
@@ -95,11 +97,15 @@ export async function POST(req: Request) {
     )
   }
 
-  // Mode-aware model routing: plan upgrades, code downgrades, agent respects user pick.
+  // Mode-aware model routing:
+  //   - Agent + Plan default → respect user pick (same model, different prompt).
+  //   - Plan + deepThink     → escalate to reasoning tier (Opus / GPT-5 / Gemini 2.5 Pro).
+  //   - Code                 → silently downgrade to fast/cheap model.
   const routed = routeModel({
     mode: requestedMode,
     userModelId: modelId,
     userProvider: modelPricing.provider,
+    deepThink: requestedDeepThink,
   })
 
   // Resolve AI model — fail gracefully if provider key is missing
