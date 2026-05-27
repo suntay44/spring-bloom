@@ -1,701 +1,355 @@
-# Manual Testing — Tier S + Tier A Features
+# SpringBloom — Master Manual Testing Checklist
 
-Tests for everything shipped in this push: Security Scanner, Plan/Agent/Code modes, Knowledge, SEO/AEO, Custom Domains.
+**Everything to test in one place.** Tier S → A → Round 0 → 1 → 2 → 3 → 4 + Chat Queue.
+
+Estimated full run: **~3 hours** for one person doing every test. Critical-path subset takes ~45 min — those are marked **🔥**.
 
 ---
 
-## 0. Prerequisites (Run Once)
+## 0. Pre-flight — one-time setup
 
-Apply these migrations in your Supabase SQL editor (in order):
+### 0.1 Apply migrations (Supabase SQL editor, in order)
 
 ```
 supabase/migrations/031_security_scans.sql
 supabase/migrations/032_message_modes.sql
 supabase/migrations/033_knowledge.sql
 supabase/migrations/034_custom_domains.sql
+supabase/migrations/035_cache_telemetry.sql
+supabase/migrations/036_deployments.sql
+supabase/migrations/037_security_notes.sql
+supabase/migrations/038_user_snippets.sql
+supabase/migrations/039_test_runs.sql
+supabase/migrations/040_knowledge_chunks.sql
 ```
 
-Then verify these env vars are set (in `.env.local`):
+### 0.2 Required env vars (`.env.local`)
 
-| Var | Used by | Required for |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Security scanner (in-depth), modes | In-depth security scan + Plan mode |
-| `OPENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Modes | Cross-provider mode routing |
-| `CLOUDFLARE_API_TOKEN` | Custom domains | Custom hostname provisioning |
-| `CLOUDFLARE_ZONE_ID` | Custom domains | Custom hostname zone |
+| Var | Used by |
+|---|---|
+| `ANTHROPIC_API_KEY` | Security in-depth scan, Plan deep-think, chat |
+| `OPENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` | Cross-provider mode routing |
+| `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` | Custom domains, publish, rollback |
+| `FLY_API_TOKEN` + `FLY_APP_NAME` | Project preview, exec, all scaffolds, tests |
+| `FLY_SWEEPER_SECRET` | Admin sweeper endpoint |
+| `STRIPE_SECRET_KEY` (project_secrets) | Stripe products CRUD (per-project, not platform) |
 
-Restart `npm run dev` after any env change.
+Restart `npm run dev` after env changes.
+
+### 0.3 Sanity check
+
+```sh
+npx tsc --noEmit         # → zero errors (1 pre-existing in __tests__/lib/multi-turn.test.ts is OK)
+npx vitest run           # → 268/268 passing
+```
 
 ---
 
-## 1. Security Scanner
+## 1. Security Scanner (Tier S)
 
-### Setup
-1. Open any project in the builder.
-2. Ensure the preview is running (Fly machine started).
-3. Click the **Security** tab (Cloud icon).
+Open the project builder → **Security** tab (Cloud icon).
 
 ### Quick Scan (free, ~5s)
+- 🔥 **1.1** Empty project: click **Quick scan** → "No issues found" green panel (or amber `npm audit` skipped banner)
+- 🔥 **1.2** Ask AI to add a table without RLS → Quick scan → CRITICAL finding "Table 'public.X' has no Row Level Security", recommendation includes `alter table ... enable row level security`
+- **1.3** Expand a finding → **Accept risk** → finding hides; expand "Accepted risks · 1" footer → **Re-open** → returns to list
+- **1.4** Install `lodash@4.17.20` in the project → Quick scan → dependency finding ≥ medium, advisory URL link works
+- **1.5** Stop the Fly machine → Quick scan → still completes; dependency scanner shows amber "No Fly machine available" warning; RLS still runs
 
-**Test 1.1 — Empty project (no migrations, no deps)**
-- [ ] Click **Quick scan**.
-- Expected: spinner appears, then "No issues found" green panel, or a banner like "No npm audit output (project may not have a lockfile yet)".
-- Expected: scan row in Supabase `security_scans` with `scan_type='quick'`, `status='completed'`, `findings_count=0`.
+### In-depth Scan (~30s, ~1 credit)
+- 🔥 **1.6** Ask AI to write `/api/admin` that runs whatever SQL is in the body → In-depth scan → HIGH/CRITICAL finding under "Code Review (AI)"
+- **1.7** Fresh scaffolded project → In-depth scan → zero false positives or all flagged items are real
+- **1.8** Severity tile counts match the visible findings list
+- **1.9** **SARIF download** chip next to scan summary → downloads `<slug>-security-<id>.sarif` → opens as valid JSON `version: "2.1.0"`
+- **1.10** Upload that SARIF to GitHub Code Scanning (repo Settings → Security → Code Scanning) → findings appear as PR annotations
+- **1.11** Without `?include_accepted=1`, accepted findings excluded from download; with it, they're present with `properties.accepted_risk: true`
 
-**Test 1.2 — Project with a table missing RLS**
-- Generate any project. In the AI chat, ask: "Add a `todos` table without RLS for now."
-- After it runs, click **Quick scan**.
-- Expected: One CRITICAL finding "Table 'public.todos' has no Row Level Security".
-- Expected: Severity tile "Critical" shows **1**.
-- Expected: Recommendation includes `alter table public.todos enable row level security;`
-
-**Test 1.3 — Accept risk flow**
-- On a finding, expand it, click **Accept risk**.
-- Expected: Finding disappears from the main list.
-- Expected: "Accepted risks · 1" collapsed panel appears at the bottom.
-- Expand it and click **Re-open**.
-- Expected: Finding reappears at the top.
-
-**Test 1.4 — Dependency vulnerability detection**
-- In the project, install a known vulnerable package: ask AI to "install lodash@4.17.20" (known prototype pollution CVE).
-- Run **Quick scan** again.
-- Expected: Dependency finding with severity ≥ medium, includes `lodash` in package name, has an advisory URL link.
-- Click the advisory link — should open in a new tab.
-
-### In-Depth Scan (~30s, ~1 credit)
-
-**Test 1.5 — Code review surfaces real issues**
-- In a project, ask AI to write an API route that reads from request body without validation, e.g. "create a POST /api/admin route that runs whatever SQL is in the body".
-- Wait for it to finish.
-- Click **In-depth scan**.
-- Expected: progress takes 15-30s, then findings appear under "Code Review (AI) · N".
-- Expected: Severity is HIGH or CRITICAL, category is `injection` or `auth`.
-- Expected: Recommendation is concrete (not vague).
-
-**Test 1.6 — No false positives on clean code**
-- Open a fresh scaffolded project (no custom code yet).
-- Run **In-depth scan**.
-- Expected: Either zero code-review findings OR all findings are real (no "missing rate limiting" or "should add helmet" — those are excluded by the prompt).
-
-**Test 1.7 — Scanner errors are non-blocking**
-- Stop the project's Fly machine.
-- Click **Quick scan**.
-- Expected: Scan still completes. Dependency scanner shows an amber "No Fly machine available — start your project preview" message. RLS scanner runs normally on any migrations it can find.
-
-### Edge cases
-- [ ] **Refresh button** in header re-fetches scan from API
-- [ ] Multiple scans in a row — only the latest displays
-- [ ] Severity counts in tiles match the actual finding list
+### Generation-time Security Notes (UNIQUE vs Lovable)
+- 🔥 **1.12** Ask AI to "Add comments table with RLS + policy" → query `security_notes` → rows with patterns `enable_rls`, `create_policy`, file_path set
+- **1.13** Ask for `dangerouslySetInnerHTML` usage → note with `innerhtml_assign` / `xss`
+- **1.14** Ask AI to embed `STRIPE_SECRET_KEY = 'sk_live_xxx'` in code → note `hardcoded_token_like`
+- **1.15** Benign "Add an About page" → no new `security_notes` rows
+- **1.16** 50+ `eval()` calls in one file → at most 50 notes inserted
 
 ---
 
-## 2. Plan / Agent / Code Modes
+## 2. Plan / Agent / Code Modes (Tier S)
 
-### Setup
-- Open the builder. The mode toggle is next to the **Visual edits** button in the composer row.
+Mode toggle is next to "Visual edits" in the composer row.
 
-### Agent Mode (default)
-
-**Test 2.1 — Default behavior unchanged**
-- [ ] Agent is selected on load.
-- [ ] Send a normal message ("Add a contact form").
-- Expected: Same behavior as before — code generation streams in.
-- Expected: Model used is whatever the user picked in the model dropdown.
-
-### Plan Mode
-
-**Test 2.2 — Plan mode produces a plan, not code (default = same model)**
-- Click **Plan** in the toggle (violet active state).
-- Notice the "Deep think" checkbox + (i) info icon appear next to the toggle.
-- Leave Deep think OFF. Send: "Add Stripe checkout to my landing page."
-- Expected: Assistant response is a markdown plan (files to touch, steps, considerations) — NOT artifact code.
-- Expected: **Cost is the SAME as a normal message** — same model as Agent, just a planning-focused prompt.
-
-**Test 2.3 — Deep think info tooltip**
-- Hover (or click) the (i) icon next to "Deep think".
-- Expected: Tooltip appears showing:
-  - "Routes your plan through a reasoning-tier model"
-  - "Costs ~5× a normal message — only use for non-trivial planning"
-  - Hint to use it for DB schema design, migrations, refactors.
-- Move the cursor away — tooltip disappears.
-
-**Test 2.4 — Deep think upgrades to reasoning model**
-- Tick the "Deep think" checkbox (turns violet).
-- Send: "Design the database schema for a multi-tenant SaaS with row-level isolation."
-- Expected: Response takes longer (~15-25s), uses Opus / GPT-5 / Gemini 2.5 Pro depending on selected provider.
-- Expected: ~5× the cost of a normal message (visible in agent_runs row).
-- Untick the checkbox — next message goes back to your normal model.
-
-**Test 2.5 — Plan is editable then approvable** (manual rendering needed if PlanCard not wired into MessageItem yet)
-- [ ] In a follow-up, edit the plan markdown.
-- [ ] Click **Approve & Build**.
-- Expected: Mode auto-switches back to Agent and execution begins.
-
-### Code Mode
-
-**Test 2.6 — Code mode uses Haiku/cheap model**
-- Click **Code** (amber active state).
-- Send: "Change the button background to red."
-- Expected: Response is faster (~half the time), shorter, diff-focused.
-- Expected: Cost is ~1/5 normal.
-
-**Test 2.7 — Model selector still works across modes**
-- Switch user model to Gemini/OpenAI.
-- Switch mode to Plan with Deep think ON.
-- Expected: Deep think routes to the matching provider's reasoning model (Gemini 2.5 Pro / GPT-5), not Anthropic.
-
-**Test 2.8 — Toggle is disabled during streaming**
-- [ ] While a message is streaming, the mode toggle and Deep think checkbox are disabled.
+- 🔥 **2.1** Agent (default): send "Add a contact form" → normal artifact stream (no behavior change vs before)
+- 🔥 **2.2** Plan mode, **Deep think OFF** → "Add Stripe checkout" → markdown plan instead of code; cost = same as agent (same model)
+- **2.3** Hover the **(i)** next to Deep think → tooltip explains "reasoning-tier model, ~5× cost", lists use cases
+- **2.4** Plan + Deep think ON → "Design multi-tenant SaaS schema" → slower (~15-25s), Opus/GPT-5/Gemini 2.5 Pro response, agent_runs row shows ~5× cost
+- **2.5** Code mode → "Change button background red" → fast, diff-focused, ~⅕ cost (Haiku)
+- **2.6** Switch user model to Gemini → Plan + Deep think → Gemini 2.5 Pro (not Anthropic Opus)
+- **2.7** Toggle + Deep think checkbox disabled while streaming
+- 🔥 **2.8** After plan-mode response, the assistant message renders as **PlanCard** (violet, "PLAN · draft") not plain text
+- **2.9** Click **Edit** → markdown becomes editable; click **Preview** → renders
+- **2.10** Click **Approve & Build** → mode auto-switches to Agent; auto-sends "Implement this plan: ..."; agent execution begins
+- **2.11** Click **Discard** → status shows "Discarded"; no execution
+- **2.12** Refresh page → plan history still renders as PlanCards with correct statuses
 
 ---
 
-## 3. Knowledge — file-first 3-tier
+## 3. Knowledge — 3-tier File-First (Tier S)
 
-### Setup
-- Apply migration 033.
-- User-level knowledge lives at `/api/user/knowledge`.
-- Project-level lives as `AGENTS.md` in the project's Fly machine.
-
-### User-level Knowledge
-
-**Test 3.1 — Set + read user knowledge**
-- Open browser devtools console.
-- Run:
-  ```js
-  await fetch('/api/user/knowledge', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: 'Always prefer Drizzle ORM. Never use Prisma.' }),
-  })
-  ```
-- Then `await (await fetch('/api/user/knowledge')).json()` — should return the content.
-
-**Test 3.2 — User knowledge is injected into chat system prompt**
-- After 3.1, send a chat message: "Add a database table for users."
-- Expected: The generated code uses Drizzle ORM (not Prisma).
-- (How to verify: inspect the artifact code; should see `drizzle-orm` import, not `@prisma/client`.)
+### User-level
+- **3.1** Devtools: `await fetch('/api/user/knowledge', {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: 'Always use Drizzle, never Prisma.' })})`
+- **3.2** Send "Add a users table" → generated code uses Drizzle (not Prisma)
 
 ### Project-level AGENTS.md
+- 🔥 **3.3** **Auto-generation**: create a brand-new project, wait for Fly machine to boot → Files panel shows `AGENTS.md` with project metadata
+- **3.4** Edit AGENTS.md ("Use TanStack Query"); restart preview → file NOT clobbered
+- **3.5** After 3.4, ask "Add a posts list" → uses `useQuery` (not raw fetch)
+- **3.6** Add `.cursorrules` instead → still picked up via fallback chain
+- **3.7** 10,000-char AGENTS.md → only ~3600 chars injected with "…[knowledge truncated]" marker
 
-**Test 3.3 — Project AGENTS.md is read on every turn**
-- In a project, ask the AI to "Create an AGENTS.md file that says: This project uses TanStack Query for all data fetching."
-- After it's written, in a NEW chat message, ask: "Add a posts list page."
-- Expected: Generated code uses TanStack Query (`useQuery`), not raw fetch/SWR.
-
-**Test 3.4 — Fallback file paths**
-- Delete `AGENTS.md` from the project (via Files panel).
-- Create `.cursorrules` with content "Use Tailwind classes only — no inline styles."
-- Send a chat message asking for any new component.
-- Expected: Generated code uses Tailwind classes, no `style={{}}` props.
-
-**Test 3.5 — Token budget cap respected**
-- Create an AGENTS.md with 10,000+ chars of nonsense.
-- Send any message.
-- Expected: System prompt is not blown out — only 60% of the 6000-char budget (~3600 chars) of the AGENTS.md gets through, with a "…[knowledge truncated]" marker.
-
-### Both tiers together
-
-**Test 3.6 — Project wins on conflicts**
-- Set user knowledge: "Use Tailwind."
-- Set project AGENTS.md: "Use vanilla CSS only — no frameworks."
-- Send: "Add a styled button."
-- Expected: Generated code uses vanilla CSS, not Tailwind (project AFTER user → wins via recency).
-
----
-
-## 4. SEO / AEO
-
-### Setup
-- Open a project, click the **SEO** tab (Search icon).
-
-**Test 4.1 — Default config loads**
-- Expected: Form pre-fills with project name, slug-based URL (`https://{slug}.springbloom.app`), default description.
-
-**Test 4.2 — Preview files**
-- Click **Preview files**.
-- Expected: 6 files appear in the list:
-  - `public/robots.txt`
-  - `public/llms.txt`
-  - `app/sitemap.ts`
-  - `lib/seo/config.ts`
-  - `lib/seo/SEO.tsx`
-  - `lib/seo/jsonld.ts`
-- Click each to expand — verify content is correct (e.g. robots.txt includes `GPTBot`, `PerplexityBot`, `ClaudeBot`).
-
-**Test 4.3 — Apply to project**
-- Click **Apply to project** (project's Fly machine must be running).
-- Expected: Green "Wrote 6 files" panel listing each path.
-- Open the Files panel — confirm `public/robots.txt` and others now exist in the project.
-- Open `https://{preview-url}/robots.txt` — should serve the generated content.
-- Open `https://{preview-url}/llms.txt` — should serve the AEO file.
-
-**Test 4.4 — Custom config works**
-- Edit the site name to "My Cool App", Twitter handle to "@coolapp", custom description.
-- Click **Preview files** again.
-- Expected: `llms.txt` and `lib/seo/config.ts` reflect the new values.
-
-**Test 4.5 — Apply without Fly machine fails gracefully**
-- Stop the preview machine.
-- Click **Apply to project**.
-- Expected: Toast error "No Fly machine available — start your project preview first".
-- Form data is preserved.
-
----
-
-## 5. Custom Domains
-
-### Setup
-- Publish a project first (use **Publish** modal).
-- Once published, the modal shows a "Custom Domains" section.
-
-**Test 5.1 — Add a domain (happy path)**
-- In the published modal, type `test.yourdomain.com` (use a real domain you control).
-- Click **Add**.
-- Expected: Cloudflare creates a Custom Hostname, row appears in DNS table.
-- Expected: Status shows `DNS verifying` + `SSL pending`.
-- Expected: Two DNS records displayed with **Copy** buttons:
-  - `CNAME @ → {slug}.springbloom.app`
-  - `TXT _cf-custom-hostname → {verification token}`
-
-**Test 5.2 — Invalid hostname rejected**
-- Type `not a valid hostname` or `127.0.0.1`.
-- Click **Add**.
-- Expected: Toast error "Invalid hostname", no row added.
-
-**Test 5.3 — Duplicate hostname blocked**
-- Try adding the same hostname twice.
-- Expected: Second attempt returns "Hostname already added" error.
-
-**Test 5.4 — Re-check DNS**
-- Click the refresh icon on a pending domain.
-- Expected: Calls Cloudflare, updates status, "checked Ns ago" label updates.
-
-**Test 5.5 — Go live (real DNS)**
-- Actually add the displayed CNAME + TXT records at your registrar.
-- Wait ~2-5 minutes, click **Re-check DNS**.
-- Expected: Status flips to `DNS active` + `SSL active`.
-- Border turns emerald green; **External link icon** appears in the header.
-
-**Test 5.6 — Mark as primary**
-- On a live domain, click **Make primary**.
-- Expected: Badge "Primary" appears, button label changes to "Unset primary".
-- Add a second live domain, mark it primary.
-- Expected: First domain loses its primary status (only one primary per project enforced by partial unique index).
-
-**Test 5.7 — Delete domain**
-- Click the trash icon.
-- Confirm in the prompt.
-- Expected: Domain removed from list, Cloudflare Custom Hostname also deleted.
-
-**Test 5.8 — CF token missing — graceful error**
-- Temporarily unset `CLOUDFLARE_API_TOKEN`, restart server.
-- Try to add a domain.
-- Expected: 502 error toast with the CF API error message (not a crash).
-
----
-
-## 6. Regression Tests
-
-After all the above, run the full test suite to confirm nothing broke:
-
-```sh
-npx vitest run
-```
-
-Expected: 236/236 passing.
-
-```sh
-npx tsc --noEmit
-```
-
-Expected: zero new errors (one pre-existing `multi-turn.test.ts` line 228 error is acceptable).
-
----
-
-## 7. Cost Verification
-
-Watch your AI spend in real-time:
-
-| Action | Expected cost |
-|---|---|
-| Quick security scan | $0 |
-| In-depth security scan | ~$0.03 (~1 credit) |
-| Agent mode message | Same as before |
-| **Plan mode (default — Deep think OFF)** | **Same as Agent — same model, planning prompt** |
-| **Plan mode + Deep think ON** | **~5× normal (~7-10 credits) — Opus/GPT-5/Gemini 2.5 Pro** |
-| Code mode message | ~⅕ of agent cost |
-| Chat with no user knowledge set | Same as before |
-| Chat with 1500-char user knowledge | +~$0.005 per turn |
-| Chat with full 6000-char knowledge budget used | +~$0.02 per turn |
-| SEO file generation | $0 (pure code gen, no AI call) |
-| Custom domain add/check | $0 from us (Cloudflare API is free for ≤100 hostnames/zone) |
-
-If you see unexpected spend, check the `agent_runs` table — every AI call writes a row with token counts.
-
----
-
-## 8. Round 0 — Cost Optimization (NEW)
-
-Apply migration `035_cache_telemetry.sql` first. Set `FLY_SWEEPER_SECRET` in `.env.local`.
-
-**Test 8.1 — Anthropic prompt caching is hitting**
-- Start a chat with Claude Sonnet selected. Send 3 messages back-to-back ("hi", "add a button", "make it blue").
-- Open Supabase → `agent_runs` table → look at last 3 rows.
-- Expected: First row: `cache_creation_input_tokens > 0`, `cache_read_input_tokens` may be 0.
-- Expected: Rows 2 & 3: `cache_read_input_tokens > 0`, `cache_creation_input_tokens` may be smaller.
-- Target after a week of usage: average `cache_read / (cache_read + cache_creation + tokens_input) > 60%`.
-
-**Test 8.2 — AGENTS.md cache (no Fly wake-up every turn)**
-- With a project preview running, watch the Fly logs (`fly logs -a springbloom-builder`).
-- Send a chat message. Note the time of the `exec` call.
-- Send another within 60 seconds.
-- Expected: only ONE exec call (the first); second message reads from in-process cache.
-- After 60s+, expected: another exec call.
-
-**Test 8.3 — fileTree is now real (model knows what files exist)**
-- Open a project with several files in the Files panel.
-- Ask: "What files are in this project?"
-- Expected: Model lists actual files (e.g. `app/page.tsx`, `lib/utils.ts`), not a generic guess.
-- Before the fix: model would invent file names.
-
-**Test 8.4 — Hold estimate now includes input cost**
-- Long-running chat (>15 messages). Watch the credit estimate in the composer ("est. ~X credits").
-- Expected: Estimate grows with conversation length (was previously flat).
-- Confirm in `credit_transactions`: the hold amount should now reflect input + output.
-
-**Test 8.5 — model_pricing cache (no DB hit per turn)**
-- Open browser devtools network tab.
-- Send 5 chat messages.
-- Expected: Initial chat call may include model_pricing query; subsequent 4 should not (cache TTL = 5min).
-
-**Test 8.6 — Fly sweeper (dry run + live)**
-- In terminal:
-  ```bash
-  curl -H "Authorization: Bearer $FLY_SWEEPER_SECRET" \
-    "http://localhost:3000/api/admin/fly-sweeper?dry_run=1&days=30"
+### RAG-lite (R4-5)
+- 🔥 **3.8** Upload a doc:
+  ```js
+  await fetch('/api/user/knowledge/docs', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_type: 'upload', filename: 'api-spec.md',
+      content: 'The /widgets endpoint accepts POST { name, color } and returns 201 with the new widget.',
+      project_id: '<your-project-id>',
+    }),
+  }).then(r => r.json())
   ```
-- Expected: JSON `{ dry_run: true, candidates: [...], count: N }`. No machines destroyed.
-- For a live test (CAREFUL): create a throwaway project, age it via `update projects set updated_at = now() - interval '40 days'`, then call without `dry_run=1`. Verify machine is destroyed in Fly dashboard.
+- **3.9** Verify in Supabase: `select count(*) from knowledge_doc_chunks where doc_id = '<doc-id>'` → ≥ 1
+- 🔥 **3.10** In that project, ask "How do I create a widget?" → response references `/widgets`, POST, the exact field names
+- **3.11** Ask an unrelated question → no RAG injection (no extra latency, no irrelevant chunks)
+- **3.12** Project's chunks AND user-global chunks both retrievable
+
+### Cost conflict resolution
+- **3.13** User: "Use Tailwind"; Project AGENTS.md: "vanilla CSS only" → generated code uses vanilla CSS (project wins via recency)
 
 ---
 
-## 9. Round 1 — Quick Wins (NEW)
+## 4. SEO / AEO (Tier A)
 
-### 9.1 SARIF Security Export
+Open project → **SEO** tab (Search icon).
 
-**Test 9.1.1 — Download SARIF after a scan**
-- Run a Quick scan or In-depth scan with findings (see §1).
-- A "SARIF" download chip appears next to the scan summary.
-- Click it. Expected: file `<project-slug>-security-<scanId>.sarif` downloads.
-- Open the file. Expected: JSON with `version: "2.1.0"`, `runs[0].tool.driver.name === "SpringBloom Security Scanner"`, `runs[0].results[]` matching findings.
-
-**Test 9.1.2 — GitHub Code Scanning upload**
-- In your GitHub repo Settings → Code Scanning → enable advanced setup.
-- Upload the .sarif via Security tab → Code Scanning → Tools → Upload.
-- Expected: Findings appear as PR annotations and in the Security tab.
-
-**Test 9.1.3 — Accepted-risk filtering**
-- After accepting some risks (§1.3), download the SARIF without `?include_accepted=1`.
-- Expected: Accepted findings are excluded.
-- Then download with `?include_accepted=1` appended.
-- Expected: All findings present, accepted ones marked in `properties.accepted_risk: true`.
-
-### 9.2 AGENTS.md Auto-Generation
-
-**Test 9.2.1 — Created on first machine boot**
-- Create a brand new project (or click "Start preview" on one that has no Fly machine).
-- Wait for machine provision to finish.
-- Open Files panel. Expected: `AGENTS.md` exists at project root.
-- Open it. Expected: Contains `# <Project Name>`, sections for Project / Conventions / Security Baseline / Editing Rules, plus brief Q&A if user did planning.
-
-**Test 9.2.2 — Won't clobber existing AGENTS.md**
-- Edit AGENTS.md in the project ("Use Drizzle ORM exclusively").
-- Stop and restart the project preview.
-- Open AGENTS.md again. Expected: Your edits are preserved (not regenerated).
-
-**Test 9.2.3 — Picked up by next chat turn**
-- After step 9.2.2, ask the AI: "Add a database table for posts."
-- Expected: Generated code uses Drizzle, not Prisma — proves the file was injected into the system prompt.
-
-### 9.3 BYO-Analytics Adapters
-
-**Test 9.3.1 — PostHog connect**
-- Open Integrations tab. Scroll to "Analytics — bring your own" section.
-- Click **PostHog** → expand. Paste a real PostHog Project Key (or `phc_test`).
-- Click **Connect**. Expected: green "connected" badge, toast "wrote lib/analytics/posthog.ts".
-- Open Files panel. Expected: `lib/analytics/posthog.ts` exists with the configured key.
-
-**Test 9.3.2 — Plausible connect**
-- Same as 9.3.1 but for Plausible. Field: site domain.
-- Expected: `components/analytics/PlausibleScript.tsx` written.
-
-**Test 9.3.3 — Update existing config**
-- After connecting, expand again. Change a field value. Click **Update**.
-- Expected: File rewritten with new value. Same connected state.
-
-**Test 9.3.4 — Disconnect**
-- Click **Disconnect** on a connected adapter.
-- Confirm. Expected: Toast "disconnected", file deleted from project, badge removed.
-
-**Test 9.3.5 — Required-field validation**
-- Try connecting an adapter without filling the required field (marked `*`).
-- Expected: Connect button is disabled. Hovering does not allow click.
-
-### 9.4 PlanCard Auto-Render
-
-**Test 9.4.1 — Plan-mode message renders as editable card**
-- Select **Plan** mode in the toggle. Send: "Add Stripe checkout."
-- Wait for stream to finish.
-- Expected: Within ~1s after streaming completes, the assistant message swaps from plain text to a violet PlanCard with: header showing "PLAN · draft", markdown preview, Edit / Discard / Approve & Build buttons.
-
-**Test 9.4.2 — Edit the plan markdown**
-- On the PlanCard, click **Edit**.
-- Expected: Markdown becomes editable textarea. Modify it.
-- Click **Preview** — your edits show in the formatted preview.
-
-**Test 9.4.3 — Approve & Build flow**
-- Click **Approve & Build**.
-- Expected: Plan card shows "Approved" badge. Mode toggle auto-switches to **Agent**. A new user message "Implement this plan: ..." is sent automatically.
-- Expected: Agent mode then writes the actual code.
-
-**Test 9.4.4 — Discard**
-- Send a new plan, then click **Discard**.
-- Expected: Plan card shows "Discarded" badge. No execution kicks off.
-- Send a normal Agent message — confirm chat still works.
-
-**Test 9.4.5 — Plans persist after refresh**
-- Refresh the browser page.
-- Open the project. Plan history should still show as PlanCards (not plain text), with their respective statuses.
-- Edge: a Discarded plan should still show but with no actions.
+- 🔥 **4.1** Defaults pre-fill from project metadata
+- **4.2** Click **Preview files** → 6 files: `public/robots.txt`, `public/llms.txt`, `app/sitemap.ts`, `lib/seo/config.ts`, `lib/seo/SEO.tsx`, `lib/seo/jsonld.ts`
+- **4.3** robots.txt contains `GPTBot`, `PerplexityBot`, `ClaudeBot`, `Google-Extended`
+- **4.4** Click **Apply to project** → green "Wrote 6 files" panel; files appear in Files panel
+- **4.5** Visit `https://<preview>/robots.txt` and `/llms.txt` → both serve the generated content
+- **4.6** Stop Fly machine → Apply → toast "No Fly machine available — start preview first"; form data preserved
 
 ---
 
-## 10. Round 2 — Stripe Webhook Scaffold + Streamed Publish (NEW)
+## 5. Custom Domains (Tier A)
 
-Apply migration `036_deployments.sql` first.
+Publish a project first; PublishModal's "Custom Domains" section appears post-success.
 
-### 10.1 Stripe Webhook Scaffold (A1)
+- 🔥 **5.1** Add `test.yourdomain.com` (real domain you control) → row appears, `DNS verifying` + `SSL pending`, CNAME + TXT shown with Copy buttons
+- **5.2** Invalid hostname `not a hostname` → toast error
+- **5.3** Duplicate add → 409 "already added"
+- **5.4** Click refresh icon → re-checks; "checked Ns ago" updates
+- 🔥 **5.5** Add the real CNAME + TXT at your registrar, wait ~5 min, re-check → flips to `DNS active` + `SSL active`; green border; external-link icon appears
+- **5.6** **Make primary** → "Primary" badge; second domain made primary unsets the first (partial unique index works)
+- **5.7** Trash → confirm → row removed; CF hostname also deleted
+- **5.8** Unset `CLOUDFLARE_API_TOKEN`, restart → add domain → 502 with graceful error (not crash)
 
-**Test 10.1.1 — Button visible only when Stripe is connected**
-- Open Integrations tab on a project without Stripe connected.
-- Expected: No "Scaffold webhook handler" section visible.
-- Connect Stripe (any keys work — they're validated, not used here).
-- Refresh. Expected: Violet "Scaffold webhook handler" section appears above the integration cards.
+---
 
-**Test 10.1.2 — Preview without applying**
-- Expand the section. Click **Preview**.
-- Expected: 3 or 4 files listed (4 if Supabase also connected):
-  - `app/api/webhooks/stripe/route.ts`
-  - `lib/stripe/server.ts`
-  - `lib/stripe/events.ts`
-  - `supabase/migrations/<ts>_stripe_events.sql` (only if Supabase connected)
-- Click each to expand the content. Verify:
-  - `route.ts` includes `stripe.webhooks.constructEvent` for signature verification
-  - `route.ts` includes idempotency check via `stripe_events` table (if Supabase)
-  - `events.ts` has typed handlers per event
-  - Migration creates `stripe_events` with `id text primary key`
+## 6. Round 0 — Cost Optimization
 
-**Test 10.1.3 — Apply writes files to Fly machine**
-- Click **Apply to project** (preview must be running).
-- Expected: Green panel "Wrote 3-4 files" with each path listed.
-- Open Files panel. Confirm all the files exist at the listed paths.
-- Open `app/api/webhooks/stripe/route.ts` — verify it compiles (no red squigglies after `npm install stripe @supabase/supabase-js`).
+Apply migration `035_cache_telemetry.sql`. Set `FLY_SWEEPER_SECRET` in `.env.local`.
 
-**Test 10.1.4 — No Supabase = no idempotency migration**
-- Disconnect Supabase integration.
-- Click **Preview** again.
-- Expected: Now only 3 files. Description shows "(no idempotency — connect Supabase to add it)".
-- `route.ts` content no longer has the duplicate-event check.
-
-**Test 10.1.5 — End-to-end with stripe-cli**
-- Apply scaffold to a connected project.
-- In terminal: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` — note the `whsec_` it prints.
-- Add to project's `.env.local`: `STRIPE_WEBHOOK_SECRET=whsec_...`.
-- Trigger: `stripe trigger checkout.session.completed`.
-- Expected: Webhook returns 200, log shows `[stripe] checkout.session.completed: cs_test_xxx`.
-- Trigger same event id twice (Stripe replays automatically) — expected: 2nd response is `{ received: true, duplicate: true }`.
-
-### 10.2 Streamed Publish (C2)
-
-**Test 10.2.1 — Phase progress shows live**
-- Open a built project. Click **Publish** in the toolbar.
-- Expected: Modal opens. Click **Publish** button.
-- Expected: 4 step rows appear: Cloudflare project → Build → Upload → Deploy.
-- Each row goes from `○` (pending) → spinning loader (active) → ✓ (done) in real-time as the publish progresses.
-- An italic phase message ("Running npm run build inside your project...") shows below the steps.
-
-**Test 10.2.2 — Build stats appear after build phase**
-- Mid-publish, the Build / Bundle stats card appears showing:
-  - "Build succeeded · 4.2s"
-  - "Bundle 12 files · 234 KB"
-
-**Test 10.2.3 — Build log toggle**
-- Click "Build log" chevron.
-- Expected: Black console panel expands, shows actual `npm run build` stdout from the Fly machine.
-- Auto-expands on build failure (exit_code !== 0).
-
-**Test 10.2.4 — Deployment row persisted**
-- After a successful publish, query Supabase:
-  ```sql
-  SELECT id, status, build_duration_ms, bundle_size_bytes, file_count, published_url
-  FROM deployments
-  WHERE project_id = '<project-id>'
-  ORDER BY created_at DESC LIMIT 5;
+- 🔥 **6.1 Prompt cache hit rate**: send 3 chat messages back-to-back; query `agent_runs` last 3 rows → turn 2 & 3 show `cache_read_input_tokens > 0`
+- 🔥 **6.2 AGENTS.md cache**: watch `fly logs -a springbloom-builder`; send 2 chats within 60s → only ONE `exec` for AGENTS.md (cache hit on 2nd)
+- **6.3 fileTree fix**: ask "What files are in this project?" → real file list, not invented
+- **6.4 Hold estimate includes input**: long chat (>15 turns); composer cost estimate grows with history
+- **6.5 model_pricing cache**: devtools network; 5 chat messages → only 1 `model_pricing` query (5-min TTL)
+- **6.6 Fly sweeper dry-run**:
+  ```sh
+  curl -H "Authorization: Bearer $FLY_SWEEPER_SECRET" "http://localhost:3000/api/admin/fly-sweeper?dry_run=1&days=30"
   ```
-- Expected: New row with `status='success'`, populated stats.
-
-**Test 10.2.5 — Failed build is recorded**
-- Intentionally break the project (delete `app/page.tsx` or add `throw new Error()` in package.json's build script).
-- Publish.
-- Expected: Build step fails (red), build log auto-opens showing the error.
-- `deployments` row has `status='failed'`, `error_message`, full `build_log`.
-
-**Test 10.2.6 — Custom domains still work post-publish**
-- After successful publish, the Custom Domains section appears (existing flow).
-- Add a domain — verify the CNAME target matches the published URL.
-
-**Test 10.2.7 — Network error handling**
-- Stop the dev server mid-publish (kill `npm run dev`).
-- Modal shows error state with retry button. Restart server, click Retry.
-- Expected: Publish starts fresh.
+  → JSON `{ dry_run: true, candidates: [...], count: N }`; no machines destroyed
 
 ---
 
-## 11. Round 3 — Auth + Email Scaffolds + Security Notes + Snippets (NEW)
+## 7. BYO-Analytics (Round 1)
 
-Apply migrations `037_security_notes.sql` and `038_user_snippets.sql` first.
+IntegrationsPanel → "Analytics — bring your own" section.
 
-### 11.1 Auth Scaffold (B1)
+- 🔥 **7.1 PostHog connect**: expand → paste any `phc_xxx` key → **Connect** → toast "wrote lib/analytics/posthog.ts"; Files panel shows it
+- **7.2 Plausible**: same flow with site domain; file at `components/analytics/PlausibleScript.tsx`
+- **7.3 Update**: change a field value → **Update** → file rewritten
+- **7.4 Disconnect**: confirm → file deleted from project, badge removed
+- **7.5** Try Connect without required `*` field → button disabled
 
-**Test 11.1.1 — Section appears in Auth tab**
-- Open Auth tab on any project.
-- Expected: A violet "Scaffold auth code" card appears below the header.
-- Expand it.
+---
 
-**Test 11.1.2 — Preview without MFA / JWT**
-- Leave checkboxes unchecked. Click **Preview**.
-- Expected: 5 files listed — `middleware.ts`, `app/auth/callback/route.ts`, `app/auth/signout/route.ts`, `lib/auth/server.ts`, `lib/auth/client.ts`.
-- Expand each and verify it uses `@supabase/ssr` patterns.
+## 8. Stripe (Round 2 + Round 4)
 
-**Test 11.1.3 — Preview with MFA + JWT enabled**
-- Check both **Include MFA** and **Include custom JWT claims template**.
-- Click **Preview**.
-- Expected: 7 files total — added: `app/(auth)/mfa/page.tsx`, `app/(auth)/mfa/enroll-action.ts`, `supabase/migrations/<ts>_custom_access_token_hook.sql`.
+Connect Stripe in Integrations first. IntegrationsPanel.
 
-**Test 11.1.4 — Apply to project**
-- Click **Apply to project** (preview must be running).
-- Expected: Green confirmation lists all written paths. Files appear in the Files panel.
-- Open `middleware.ts` — confirm `PROTECTED` array matches what you typed.
+### Webhook Scaffold (A1)
+- 🔥 **8.1** Without Stripe connected → no "Scaffold webhook handler" section
+- **8.2** Connect Stripe → section appears (violet)
+- **8.3 Preview**: 3 files (4 if Supabase also connected): `app/api/webhooks/stripe/route.ts`, `lib/stripe/server.ts`, `lib/stripe/events.ts`, optional migration
+- **8.4** Expand `route.ts` → contains `stripe.webhooks.constructEvent` + idempotency check (Supabase)
+- 🔥 **8.5 Apply** → green confirmation, files appear in Files panel
+- **8.6 With stripe-cli**: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` → set `STRIPE_WEBHOOK_SECRET` → `stripe trigger checkout.session.completed` → 200 response, logs show handler firing
+- **8.7** Same event twice → 2nd response `{ received: true, duplicate: true }` (idempotency works)
 
-**Test 11.1.5 — Protected route enforcement**
-- After applying, `npm install @supabase/ssr` in the project.
-- Visit `/dashboard` while signed out.
-- Expected: Redirected to `/login?next=/dashboard`.
+### Products & Prices CRUD (R4-4)
+- 🔥 **8.8** Expand "Products & Prices" → list loads from your connected Stripe account
+- **8.9** **Add product**: name "Pro", $19, USD, Monthly → **Create** → product appears, has price `1900 USD / month`
+- **8.10** External-link icon → opens product in dashboard.stripe.com
+- **8.11** **Archive** → confirm → product becomes inactive (drops from list)
+- **8.12** Disconnect Stripe → next API call returns "Stripe is not connected" 502
 
-### 11.2 Resend Email Scaffold (B2)
+---
 
-**Test 11.2.1 — Section only when Resend connected**
-- Open Integrations tab. Without Resend connected, no "Scaffold email templates" section.
-- Connect Resend (any API key). Refresh.
-- Expected: violet "Scaffold email templates" card appears.
+## 9. Publish / Deployment (Round 2 + Round 4)
 
-**Test 11.2.2 — Preview + apply**
-- Expand. Set Product name, from address, brand color.
-- Click **Preview** — expected 5 files (4 if "Include receipt template" unchecked).
-- Click **Apply**. Expected: files written to `lib/emails/templates/*.tsx`, `lib/emails/send.ts`, `lib/emails/preview.tsx`.
+PublishModal — click **Publish** button in the toolbar.
 
-**Test 11.2.3 — Template renders locally**
-- In the project: `npm install resend @react-email/components @react-email/render`.
-- Create `app/email-preview/page.tsx` with `import PreviewIndex from '@/lib/emails/preview'; export default PreviewIndex`.
-- Visit `/email-preview` in the project preview.
-- Expected: Welcome / Password Reset / Magic Link / Receipt templates render in iframes with sample data.
+- 🔥 **9.1 Streamed phases**: 4 step rows appear: Cloudflare project → Build → Upload → Deploy; each `○ → ⌛ → ✓` live; italic phase messages below
+- **9.2 Stats card**: appears mid-publish — "Build succeeded · 4.2s", "Bundle 12 files · 234 KB"
+- **9.3 Build log toggle**: click chevron → console panel with actual `npm run build` output
+- 🔥 **9.4 deployment row**: query `deployments` → new row with `status='success'`, build_duration_ms, bundle_size_bytes, file_count
+- **9.5 Failure path**: break the project (`throw new Error()` in package.json build) → Publish → red step, log auto-opens; row has `status='failed'`, full `build_log`
+- **9.6 Stop server mid-publish** → error state + Retry button → Retry works after server restarts
 
-**Test 11.2.4 — sendEmail() type-checks**
-- In any server file: `import { sendEmail } from '@/lib/emails/send'`.
-- Try `sendEmail({ template: 'welcome', to: 'me@example.com', props: {} })`.
-- Expected: TypeScript error — `name` is required in `props`.
-- Add `name: 'Test'` — type error gone.
+### Rollback (R4-2)
+- 🔥 **9.7** After 2+ successful publishes, expand **Deployment history** in modal → list with timestamps, file counts, "live" badge on current
+- **9.8** Rollback icon on a previous deployment → confirm → toast "Rolled back"; live URL serves the previous build
+- **9.9 Verify**: refresh history → previous deployment now has "rolled back" badge; new row appeared for the rollback action
+- **9.10** Rollback non-success row → button disabled (only on `status='success'`)
 
-### 11.3 Generation-Time Security Notes (G5) — UNIQUE
+---
 
-**Test 11.3.1 — Notes appear after AI writes RLS**
-- Send a chat message: "Add a `comments` table with RLS enabled and a policy for users to read their own."
-- Wait for the artifact to finish.
-- Query Supabase:
-  ```sql
-  SELECT pattern, title, file_path, line_start
-  FROM security_notes
-  WHERE project_id = '<project-id>'
-  ORDER BY created_at DESC LIMIT 10;
-  ```
-- Expected rows with patterns `enable_rls` and `create_policy`, file_path pointing to the migration.
+## 10. Auth Scaffold (Round 3)
 
-**Test 11.3.2 — eval() / dangerouslySetInnerHTML flagged**
-- Send: "Add a page that uses dangerouslySetInnerHTML to render user-provided HTML."
-- After generation, expect a `security_notes` row with pattern `innerhtml_assign`, category `xss`.
+Auth tab → "Scaffold auth code" violet card.
 
-**Test 11.3.3 — Hardcoded secret detection**
-- Send a chat asking the AI to embed `STRIPE_SECRET_KEY = 'sk_live_xxxxx'` directly in a file.
-- After generation: expect a note with pattern `hardcoded_token_like`.
+- 🔥 **10.1 Preview without MFA/JWT**: 5 files (`middleware.ts`, `app/auth/callback/route.ts`, `app/auth/signout/route.ts`, `lib/auth/server.ts`, `lib/auth/client.ts`)
+- **10.2 With both checkboxes**: 7 files (+ `app/(auth)/mfa/page.tsx`, `enroll-action.ts`, `supabase/migrations/<ts>_custom_access_token_hook.sql`)
+- 🔥 **10.3 Apply** → all files written; `middleware.ts` PROTECTED array matches your input
+- **10.4** Run `npm install @supabase/ssr` in project → visit `/dashboard` while signed-out → redirected to `/login?next=/dashboard`
 
-**Test 11.3.4 — Doesn't fire on benign code**
-- Send: "Add a simple About page with a heading and paragraph."
-- After generation: no new `security_notes` rows.
+---
 
-**Test 11.3.5 — Cap respected**
-- Generate a file with many `eval()` calls (50+).
-- Expected: at most 50 notes inserted for this one generation.
+## 11. Email Templates (Round 3)
 
-### 11.4 Snippets / Skills Library (B4)
+Connect Resend in Integrations first. Section appears in IntegrationsPanel.
 
-**Test 11.4.1 — Create a snippet via API**
-- In browser devtools:
+- 🔥 **11.1 Preview** with Product name, brand color, from address → 4-5 files: `lib/emails/send.ts`, `lib/emails/templates/{welcome,password-reset,magic-link,receipt}.tsx`, `lib/emails/preview.tsx`
+- **11.2 Apply** → files written; `npm install resend @react-email/components @react-email/render`
+- **11.3** Mount `PreviewIndex` at `/email-preview` in project → all 4 templates render in iframes with sample data
+- **11.4 TypeScript safety**: `sendEmail({ template: 'welcome', to: 'me@example.com', props: {} })` → TS error "name required in props"
+
+---
+
+## 12. Snippets / Skills Library (Round 3 + Round 4)
+
+### Slash command picker (B4)
+- 🔥 **12.1 Create via API**:
   ```js
   await fetch('/api/user/snippets', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      trigger: 'drizzle-setup',
-      label: 'Drizzle ORM standard setup',
+      trigger: 'drizzle-setup', label: 'Drizzle ORM standard setup',
       description: 'Use when adding Drizzle to a new project',
-      body: 'Set up Drizzle ORM with PostgreSQL. Use the schema-first approach.',
+      body: 'Set up Drizzle ORM with PostgreSQL. Schema-first approach.',
       tags: ['database', 'drizzle'],
     }),
-  }).then((r) => r.json())
+  })
   ```
-- Expected: returns `{ snippet: { id, trigger: 'drizzle-setup', ... } }`.
+- 🔥 **12.2** Type `/` in chat → picker appears showing the snippet with `/drizzle-setup` badge
+- **12.3** Continue typing `/dri` → filtered list
+- **12.4** ↓↑ navigation + Enter to pick → composer value replaced with snippet body; picker closes
+- **12.5** Re-open picker → snippet shows `×1` use count, sorts to top
+- **12.6** Duplicate trigger → 409 "already exists"
+- **12.7** Invalid trigger (`Bad Name!` or `a`) → 400 "kebab-case, 2-64 chars"
 
-**Test 11.4.2 — Slash command picker opens**
-- In a project chat composer, type `/`.
-- Expected: A popover appears above the composer showing your snippet ("Drizzle ORM standard setup") with the trigger badge `/drizzle-setup`.
-
-**Test 11.4.3 — Filter by typing**
-- Continue typing: `/dri`.
-- Expected: Only snippets whose trigger or label or tag contains "dri" shown.
-
-**Test 11.4.4 — Keyboard navigation**
-- With picker open, press ↓ ↓ ↑. Expected: highlight moves between rows.
-- Press Enter on a row. Expected: input value replaces with the snippet's `body`. Picker closes.
-
-**Test 11.4.5 — Use count increments**
-- After picking a snippet, refresh and re-open the picker.
-- Expected: The picked snippet shows `×1` use count and is sorted to the top by most-recently-used.
-
-**Test 11.4.6 — Duplicate trigger blocked**
-- Try POSTing a second snippet with `trigger: 'drizzle-setup'`.
-- Expected: 409 error "A snippet with this trigger already exists".
-
-**Test 11.4.7 — Trigger validation**
-- Try `trigger: 'Bad Name!'` or `trigger: 'a'` (too short).
-- Expected: 400 error "Trigger must be 2-64 chars, lowercase, kebab-case".
+### Management page (R4-3) — `/settings/snippets`
+- 🔥 **12.8** Visit `/settings/snippets` → list shows your snippets with `/trigger` badges
+- **12.9 New snippet**: click **New snippet** → editor opens → fill all fields → **Create** → appears in list
+- **12.10 Edit**: pencil icon → editor opens with body loaded; modify → **Save** → list reflects change
+- **12.11 Delete**: trash icon → confirm → snippet removed
 
 ---
 
-## 12. Things NOT Yet Tested (Known Gaps)
+## 13. Test Runner (Round 4)
 
-- **Reference docs RAG** (`knowledge_docs` table) — schema exists, embedding pipeline pending.
-- **Browser testing (Playwright)** — deferred (needs sidecar Fly machine work).
-- **Test runner panel** — pending.
-- **Stripe Products & Prices CRUD panel** — deferred from A1.
-- **Deployment rollback** — deployments table tracks history but rollback API/UI not yet built.
-- **Snippet management UI** — only `/settings/snippets` link in picker footer; no actual settings page built yet (snippets are CRUD'd via API for now).
+**Tests** tab (Terminal icon) in the builder.
+
+- 🔥 **13.1 Run tests**: click button → spinner; phase "Detecting test framework..." → "Running ..." → result card
+- **13.2 Pass/fail/skip tiles**: counts match actual output
+- **13.3** Click "stdout" chevron → full output (auto-opens on failure)
+- **13.4 History list**: after a run, history row appears with framework, P/F/S counts, time ago, duration
+- 🔥 **13.5 Framework detection**: vitest in package.json → command shows `npx vitest run`; jest → `npx jest`; @playwright/test → `npx playwright test`
+- **13.6** Failing test → status `failed`, exit_code non-zero, red tile
+- **13.7** Stats parser: pull `test_runs` row; `passed_count`/`failed_count` non-zero when stats parseable
+
+### Playwright scaffold (R4-6)
+- **13.8** Expand "Add Playwright" → both checkboxes ON → **Apply scaffold** → 5 files written: `playwright.config.ts`, `e2e/example.spec.ts`, `e2e/auth.spec.ts`, `.github/workflows/e2e.yml`, `e2e/README.md`
+- **13.9** Without checkboxes → only `playwright.config.ts` + `e2e/example.spec.ts` + README
+- **13.10** In project: `npm i -D @playwright/test && npx playwright install` then **Run tests** in the panel → uses `npx playwright test`
+
+---
+
+## 14. Chat Queue (R4-7 — Lovable parity)
+
+The killer UX feature.
+
+- 🔥 **14.1** Send a message that triggers a long generation.
+- 🔥 **14.2** While streaming, type "fine tune SEO" → press Enter → message disappears from input; **Queue (1)** card appears above composer
+- **14.3** Add 2 more messages → queue grows to **Queue (3)**
+- **14.4** Placeholder reads "Queue follow-up..." while busy / queue non-empty
+- 🔥 **14.5 Auto-drain**: when current run finishes, first queued item dispatches automatically; Queue count decreases
+- **14.6 Per-item menu** (⋮ icon): Edit (inline textarea + Save/Cancel), Copy (clipboard), Repeat (re-appends to tail), Move up/down (hidden on first/last), Remove
+- **14.7 Header**: count badge, **X** (confirm-clear-all), **▶ Play now** (dispatches next immediately if ready), **▼/▲** collapse/expand
+- 🔥 **14.8 localStorage persistence**: queue 3 items, refresh page → all 3 still in queue
+- **14.9** Different project → its own separate queue (keyed by projectId)
+- **14.10** Click Play now while still streaming → toast "Wait for the current run to finish, then the next queued item will play automatically"
+- **14.11** Drag handle icon visible on hover (no drag-reorder shipped yet; use Move up/down)
+
+---
+
+## 15. Cost Verification — sanity-check each action
+
+| Action | Expected per-use cost | Verification |
+|---|---|---|
+| **Free tier**: SEO files, custom domains, BYO analytics, SARIF download, auth scaffold, email scaffold, Stripe webhook scaffold, Playwright scaffold, snippets, queue | **$0** | No `agent_runs` row created |
+| Quick security scan | $0 | No `agent_runs` row |
+| In-depth security scan | ~$0.03 (~1 credit) | `agent_runs` row with model=haiku |
+| Agent mode message | Same as before | Baseline |
+| Plan mode (Deep think OFF) | **Same as Agent** | No surprise cost |
+| Plan mode + Deep think ON | **~5× normal (~7-10 cr)** | Opus/GPT-5/Gemini 2.5 Pro in agent_runs |
+| Code mode | ~⅕ of agent | Haiku in agent_runs |
+| Chat with no knowledge set | Baseline | knowledge resolver returns empty |
+| Chat with 1500-char user knowledge | +~$0.005/turn | +~1500 input tokens |
+| Chat with RAG matches | +~$0.013/turn | +~4000 chars chunks injected |
+| Test run (npm test) | $0 from us (Fly compute already paid) | `test_runs` row, no agent_run |
+| Publish | $0 from us | `deployments` row |
+| Rollback | $0 from us (CF API free) | new `deployments` row |
+
+---
+
+## 16. Final regression check
+
+```sh
+npx tsc --noEmit         # → zero new errors
+npx vitest run           # → 268/268 passing
+```
+
+If both green and all 🔥-marked tests pass, ship it.
+
+---
+
+## 17. Known gaps (NOT shipped yet)
+
+- pgvector + real embeddings (current RAG is ILIKE-only)
+- Sidecar Fly machines for parallel Playwright runs
+- Real-time per-run Playwright trace viewer in panel
+- Snippet drag-reorder (Move up/down ships instead)
+- Custom GitHub OAuth for snippet import
+- Custom JWT claims hook UI (we ship the SQL template only)
