@@ -8,6 +8,7 @@ import { MessageItem } from "@/components/builder/MessageItem";
 import { ScopingQuestionsCard } from "@/components/builder/ScopingQuestionsCard";
 import { ModeToggle } from "@/components/builder/ModeToggle";
 import { SnippetPicker } from "@/components/builder/SnippetPicker";
+import { ChatQueue, type QueueItem } from "@/components/builder/ChatQueue";
 import type { BuilderMode } from "@/lib/ai/model-router";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
 import { shouldAskQuestions } from "@/lib/ai/ambiguity-detector";
@@ -76,6 +77,27 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   // G1: tracks plans for plan-mode messages so MessageItem can render PlanCard.
   // Keyed by message_id; populated after streaming completes for plan-mode runs.
   const [planMap, setPlanMap] = useState<Record<string, { planId: string; status: 'draft' | 'approved' | 'discarded' | 'executed' }>>({});
+  // R4-7: Chat queue — stack messages while streaming; auto-drain on ready.
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  // Hydrate queue from localStorage (per-project key) on mount + persist on change.
+  const queueStorageKey = `springbloom:queue:${projectId}`;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(queueStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as QueueItem[];
+        if (Array.isArray(parsed)) setQueue(parsed);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(queueStorageKey, JSON.stringify(queue));
+    } catch { /* quota / private mode — ignore */ }
+  }, [queue, queueStorageKey]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("claude-sonnet-4-6");
   const [running, setRunning] = useState(false);
@@ -243,6 +265,52 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
     })
   }
 
+  // R4-7: auto-drain queue when AI becomes ready.
+  useEffect(() => {
+    if (isStreaming || running) return;
+    if (queue.length === 0) return;
+    const next = queue[0]!;
+    setQueue((q) => q.slice(1));
+    void dispatchSend(next.text);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming, running, queue]);
+
+  // R4-7: per-item queue handlers
+  function queueRemove(id: string) { setQueue((q) => q.filter((x) => x.id !== id)) }
+  function queueEdit(id: string, newText: string) {
+    setQueue((q) => q.map((x) => x.id === id ? { ...x, text: newText } : x))
+  }
+  function queueMove(id: string, dir: -1 | 1) {
+    setQueue((q) => {
+      const idx = q.findIndex((x) => x.id === id);
+      if (idx < 0) return q;
+      const target = idx + dir;
+      if (target < 0 || target >= q.length) return q;
+      const next = [...q];
+      const [moved] = next.splice(idx, 1);
+      if (moved) next.splice(target, 0, moved);
+      return next;
+    })
+  }
+  function queueClear() { setQueue([]) }
+  function queueRepeat(id: string) {
+    setQueue((q) => {
+      const item = q.find((x) => x.id === id);
+      if (!item) return q;
+      return [...q, { id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text: item.text }];
+    })
+  }
+  function queuePlayNow() {
+    if (queue.length === 0) return;
+    if (isStreaming || running) {
+      toast("Wait for the current run to finish, then the next queued item will play automatically.");
+      return;
+    }
+    const next = queue[0]!;
+    setQueue((q) => q.slice(1));
+    void dispatchSend(next.text);
+  }
+
   useEffect(() => {
     if (status !== 'ready' || !machineId || !messages.length) return
     const last = messages[messages.length - 1]
@@ -384,9 +452,15 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
 
   async function handleSend() {
     const text = inputValue.trim();
-    if (!text || isStreaming || running) return;
+    if (!text) return;
     if (attachments.some((a) => a.uploading)) {
       toast.error("Wait for uploads to finish before sending.");
+      return;
+    }
+    // R4-7: if the AI is busy, push to the queue instead of dropping the input.
+    if (isStreaming || running) {
+      setQueue((q) => [...q, { id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, text }]);
+      setInputValue("");
       return;
     }
 
@@ -564,6 +638,17 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
           ))}
         </div>
       </div>
+      {/* R4-7: Chat queue sits above the composer */}
+      <ChatQueue
+        items={queue}
+        onRemove={queueRemove}
+        onEdit={queueEdit}
+        onMoveUp={(id) => queueMove(id, -1)}
+        onMoveDown={(id) => queueMove(id, 1)}
+        onClear={queueClear}
+        onPlayNow={queuePlayNow}
+        onRepeat={queueRepeat}
+      />
       <div
         className={`agent-composer focus-within:ring-1 focus-within:ring-[var(--accent-cyan)]/30 ${isDragOver ? 'ring-2 ring-purple-400/60' : ''} ${isStreaming ? 'animate-pulse [box-shadow:0_0_0_1px_var(--accent-cyan)]' : ''} ${planningState !== 'idle' ? 'pointer-events-none opacity-40' : ''}`}
         onDrop={onDrop}
@@ -633,7 +718,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
             onClose={() => { /* user keeps typing, will dismiss when slash gone */ }}
           />
         )}
-        <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder="Ask Wild Cupcake..." value={inputValue} />
+        <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder={isStreaming || running || queue.length > 0 ? "Queue follow-up..." : "Ask Wild Cupcake..."} value={inputValue} />
         <div className="composer-actions">
           <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><ModeToggle mode={mode} onChange={setMode} deepThink={deepThink} onDeepThinkChange={setDeepThink} disabled={isStreaming || running} /><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
           <div className="relative flex items-center gap-2">

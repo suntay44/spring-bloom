@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CustomDomainsSection } from "@/components/builder/CustomDomainsSection";
+import { DeploymentHistory } from "@/components/builder/DeploymentHistory";
 
 type PublishModalProps = {
   open: boolean;
@@ -211,6 +212,11 @@ export function PublishModal({ open, onOpenChange, projectId }: PublishModalProp
                 defaultCnameTarget={new URL(url).hostname}
               />
             </div>
+          ) : null}
+
+          {/* Deployment history + rollback (R4-2) — shown once anything is published */}
+          {phase === "done" && url ? (
+            <DeploymentHistory projectId={projectId} />
           ) : null}
 
           {/* Error */}

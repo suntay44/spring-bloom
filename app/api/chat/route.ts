@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveModel } from '@/lib/ai/providers'
 import { routeModel, type BuilderMode } from '@/lib/ai/model-router'
 import { resolveKnowledge, injectKnowledge } from '@/lib/knowledge/resolver'
+import { retrieveChunks, formatChunksForPrompt } from '@/lib/knowledge/retrieval'
 import { listFilesCached } from '@/lib/fly/client'
 import { getModelPricing } from '@/lib/ai/pricing-cache'
 import { detectSecurityNotes } from '@/lib/security/generation-notes'
@@ -369,7 +370,21 @@ export async function POST(req: Request) {
     machineId:     (project as { fly_machine_id?: string | null }).fly_machine_id ?? null,
     maxChars:      6000,
   })
-  const systemPrompt = injectKnowledge(baseSystemPrompt, knowledge)
+  let systemPrompt = injectKnowledge(baseSystemPrompt, knowledge)
+
+  // R4-5: RAG-lite retrieval — pull top matching chunks from user's reference
+  // docs and append them to the system prompt. Best-effort, never throws.
+  try {
+    const ragChunks = await retrieveChunks({
+      supabase, userId: user.id, projectId,
+      query: enhancedMessage, topK: 4, maxChars: 4000,
+    })
+    if (ragChunks.length > 0) {
+      systemPrompt = systemPrompt + '\n\n' + formatChunksForPrompt(ragChunks)
+    }
+  } catch (err) {
+    console.warn('[chat] RAG retrieval failed:', err instanceof Error ? err.message : err)
+  }
 
   // ── Prompt caching (R0-1) ─────────────────────────────────────────────
   // Anthropic: mark the system prefix as ephemeral so subsequent turns

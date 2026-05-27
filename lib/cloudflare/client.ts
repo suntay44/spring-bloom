@@ -97,6 +97,29 @@ export async function deployToPages(
   return { deploymentId: deployData.result.id, url: deployData.result.url }
 }
 
+// R4-2: Rollback to a previous deployment.
+// Cloudflare Pages doesn't have a true "rollback" — instead it lets you
+// re-promote any historical deployment to production. The "rollback"
+// endpoint creates a fresh deployment that mirrors the target.
+//
+// API: POST /accounts/{account}/pages/projects/{project}/deployments/{deployment_id}/rollback
+// Returns the NEW deployment (a copy promoted to production), not the
+// original — so callers should persist this new id.
+export async function rollbackPagesDeployment(
+  projectName: string,
+  targetDeploymentId: string,
+): Promise<{ deploymentId: string; url: string }> {
+  const res = await fetch(
+    `${CF_BASE}/accounts/${ACCOUNT_ID}/pages/projects/${projectName}/deployments/${targetDeploymentId}/rollback`,
+    { method: 'POST', headers: cfHeaders() },
+  )
+  const data = await res.json() as { result: { id: string; url: string } | null; success: boolean; errors: unknown[] }
+  if (!res.ok || !data.success || !data.result) {
+    throw new Error(`CF Pages rollback failed: ${JSON.stringify(data.errors)}`)
+  }
+  return { deploymentId: data.result.id, url: data.result.url }
+}
+
 // Add a custom hostname via Cloudflare for SaaS
 export async function addCustomHostname(zoneId: string, hostname: string): Promise<{ id: string; status: string }> {
   const res = await fetch(`${CF_BASE}/zones/${zoneId}/custom_hostnames`, {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { UIMessage } from "ai";
-import { ArrowUpRight, BarChart3, Check, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, KeyRound, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Search, Share2, ShieldCheck, Smartphone, Sparkles, Upload, type LucideIcon } from "lucide-react";
+import { ArrowUpRight, BarChart3, Check, ChevronDown, Cloud, Code2, FileText, Github, Globe2, History, KeyRound, MessageSquare, MoreHorizontal, PanelLeft, RefreshCw, Search, Share2, ShieldCheck, Smartphone, Sparkles, Terminal, Upload, type LucideIcon } from "lucide-react";
 import { ChatPanel } from "@/components/builder/ChatPanel";
 import { ProjectMenu, MoreToolsMenu, type BuilderTab, type ProjectMenuUser } from "@/components/builder/ProjectMenu";
 import { AnalyticsPanel } from "@/components/builder/panels/AnalyticsPanel";
@@ -13,6 +13,7 @@ import { IntegrationsPanel } from "@/components/builder/panels/IntegrationsPanel
 import { AuthProvidersPanel } from "@/components/builder/panels/AuthProvidersPanel";
 import { SecurityPanel } from "@/components/builder/panels/SecurityPanel";
 import { SEOPanel } from "@/components/builder/panels/SEOPanel";
+import { TestPanel } from "@/components/builder/panels/TestPanel";
 import { PreviewPanel } from "@/components/builder/panels/PreviewPanel";
 import { PublishModal } from "@/components/builder/PublishModal";
 import { UpgradeModal } from "@/components/builder/UpgradeModal";
@@ -24,7 +25,7 @@ import { toast } from "@/lib/toast";
 import type { MockProject, MockProjectType } from "@/lib/mock/projects";
 import { MOCK_REVIEW_RUN } from "@/lib/mock/reviews";
 
-const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics", "Integrations", "Auth", "SEO"] as const;
+const visibleToolbarTabs = ["Preview", "Files", "Diff", "Review", "Security", "Analytics", "Integrations", "Auth", "SEO", "Tests"] as const;
 
 const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Preview: Globe2,
@@ -36,6 +37,7 @@ const TAB_ICONS: Record<BuilderTab, LucideIcon> = {
   Integrations: Sparkles,
   Auth: KeyRound,
   SEO: Search,
+  Tests: Terminal,
 };
 
 const TYPE_LABELS: Record<MockProjectType, string> = {
@@ -90,6 +92,7 @@ export function BuilderMock({ project, initialMessages = [], machineId, user }: 
     Integrations: () => <IntegrationsPanel projectId={project.id} />,
     Auth:         () => <AuthProvidersPanel projectId={project.id} />,
     SEO:          () => <SEOPanel projectId={project.id} />,
+    Tests:        () => <TestPanel projectId={project.id} />,
   };
 
   function toggleVisualEdits() {

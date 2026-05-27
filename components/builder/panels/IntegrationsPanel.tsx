@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { AnalyticsAdaptersSection } from "@/components/builder/AnalyticsAdaptersSection"
 import { StripeScaffoldSection } from "@/components/builder/StripeScaffoldSection"
+import { StripeProductsSection } from "@/components/builder/StripeProductsSection"
 import { EmailScaffoldSection } from "@/components/builder/EmailScaffoldSection"
 import {
   CreditCard, Database, Phone, Mail, Key,
@@ -171,6 +172,11 @@ export function IntegrationsPanel({ projectId }: { projectId: string }) {
                   projectId={projectId}
                   hasSupabase={!!getIntegration("supabase")}
                 />
+              )}
+
+              {/* R4-4: Stripe Products & Prices CRUD — only when Stripe is connected */}
+              {getIntegration("stripe") && (
+                <StripeProductsSection projectId={projectId} />
               )}
 
               {/* B2: Resend email scaffold — only when Resend is connected */}

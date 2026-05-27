@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, GitFork, Gift, Globe2, HelpCircle, KeyRound, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "@/lib/toast";
 
-export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations" | "Auth" | "SEO";
+export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations" | "Auth" | "SEO" | "Tests";
 
 export type ProjectMenuUser = {
   initials: string;
