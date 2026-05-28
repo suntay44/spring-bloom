@@ -14,6 +14,56 @@ const platformClient = createClient(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PlatformClient = ReturnType<typeof createClient<any>>
 
+const DEFAULT_SIGNUP_CREDITS = 20
+
+/**
+ * R6-1: grant one-time free credits on signup. Idempotent — checks for an
+ * existing bonus row tagged metadata.reason='signup_grant' before inserting.
+ * The amount is configurable via platform_settings('free_signup_credits').
+ */
+async function grantSignupCredits(userId: string): Promise<void> {
+  const db = platformClient as unknown as PlatformClient
+  try {
+    // Idempotency — has this user already received the signup grant?
+    const { data: existing } = await db
+      .from('credit_transactions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('type', 'bonus')
+      .contains('metadata', { reason: 'signup_grant' })
+      .limit(1)
+      .maybeSingle()
+    if (existing) {
+      console.log(`[user-created webhook] User ${userId} already has signup grant — skipping`)
+      return
+    }
+
+    // Resolve grant amount from platform_settings (fallback to default)
+    let amount = DEFAULT_SIGNUP_CREDITS
+    const { data: setting } = await db
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'free_signup_credits')
+      .maybeSingle()
+    const raw = (setting as { value?: unknown } | null)?.value
+    const parsed = typeof raw === 'number' ? raw : Number(raw)
+    if (Number.isFinite(parsed) && parsed >= 0) amount = parsed
+
+    if (amount <= 0) return  // grants disabled
+
+    await db.from('credit_transactions').insert({
+      user_id:  userId,
+      type:     'bonus',
+      amount,
+      metadata: { reason: 'signup_grant', granted_at: new Date().toISOString() },
+    })
+    console.log(`[user-created webhook] Granted ${amount} signup credits to ${userId}`)
+  } catch (err) {
+    // Non-fatal — never block signup over a grant failure.
+    console.error('[user-created webhook] Signup credit grant failed:', err)
+  }
+}
+
 export async function POST(req: Request) {
   // Validate webhook secret
   const secret = req.headers.get('x-webhook-secret')
@@ -43,6 +93,11 @@ export async function POST(req: Request) {
     console.log(`[user-created webhook] User ${userId} provisioning already in progress — skipping`)
     return NextResponse.json({ status: 'provisioning' })
   }
+
+  // R6-1: Free-tier credit grant — idempotent one-time bonus on signup.
+  // Grant amount is read from platform_settings (key 'free_signup_credits'),
+  // defaulting to 20. Skipped if the user already has a signup_grant bonus row.
+  await grantSignupCredits(userId)
 
   // Mark as provisioning immediately so UI can poll
   await (platformClient as unknown as PlatformClient)

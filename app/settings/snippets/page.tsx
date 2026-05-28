@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, Pencil, Plus, Save, Sparkles, Trash2, X } from "lucide-react"
+import { Github, Loader2, Pencil, Plus, Save, Sparkles, Trash2, X } from "lucide-react"
 import { toast } from "@/lib/toast"
 
 interface Snippet {
@@ -97,13 +97,16 @@ export default function SnippetsSettingsPage() {
             Apply across all your projects.
           </p>
         </div>
-        <button
-          onClick={() => { setEditing({ id: '', trigger: '', label: '', description: '', body: '', tags: [], source: 'manual', use_count: 0, last_used_at: null, updated_at: '' }); setCreating(true) }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-violet-600 hover:bg-violet-500 text-white"
-          type="button"
-        >
-          <Plus size={12} /> New snippet
-        </button>
+        <div className="flex items-center gap-2">
+          <GitHubImportButton onImported={load} />
+          <button
+            onClick={() => { setEditing({ id: '', trigger: '', label: '', description: '', body: '', tags: [], source: 'manual', use_count: 0, last_used_at: null, updated_at: '' }); setCreating(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md bg-violet-600 hover:bg-violet-500 text-white"
+            type="button"
+          >
+            <Plus size={12} /> New snippet
+          </button>
+        </div>
       </header>
 
       {/* Editor (modal-ish) */}
@@ -149,6 +152,63 @@ export default function SnippetsSettingsPage() {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── GitHub import (R6-3) ─────────────────────────────────────────────────
+
+function GitHubImportButton({ onImported }: { onImported: () => void | Promise<void> }) {
+  const [open, setOpen]     = useState(false)
+  const [url, setUrl]       = useState("")
+  const [busy, setBusy]     = useState(false)
+
+  async function doImport() {
+    if (!url.trim()) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/user/snippets/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim(), preview: false }),
+      })
+      const data = await res.json() as { created?: string[]; error?: string }
+      if (!res.ok) { toast.error(data.error ?? 'Import failed'); return }
+      toast.success(`Imported ${data.created?.length ?? 0} snippet(s)`)
+      setOpen(false); setUrl("")
+      await onImported()
+    } catch { toast.error('Network error') } finally { setBusy(false) }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+      >
+        <Github size={12} /> Import from GitHub
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') void doImport() }}
+        placeholder="github.com/owner/repo or AGENTS.md URL"
+        autoFocus
+        className="w-72 px-2.5 py-1.5 text-[12px] bg-black/40 border border-zinc-700 rounded-md text-zinc-200 focus:outline-none focus:border-violet-500/40"
+      />
+      <button type="button" onClick={() => void doImport()} disabled={busy || !url.trim()}
+        className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-50">
+        {busy ? <Loader2 size={12} className="animate-spin" /> : <Github size={12} />} Import
+      </button>
+      <button type="button" onClick={() => { setOpen(false); setUrl("") }} className="text-zinc-500 hover:text-zinc-200 p-1">
+        <X size={14} />
+      </button>
     </div>
   )
 }
