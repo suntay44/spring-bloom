@@ -333,6 +333,22 @@ You've already used this for setup, but verify:
 
 ---
 
+## 16c. Prompt Quality + Enhance (R7)
+
+In the chat composer:
+- 🔥 **16c.1** Type a vague prompt ("make an app") → composer border turns **orange** + pulses; hint pill appears: "This prompt is a bit vague — enhancing it gets a better result"
+- **16c.2** Type a refinement ("make it blue", "fix the button") → NO orange warning (refinements are fine)
+- **16c.3** Type a detailed prompt ("Build a task manager with a Postgres table, drag-drop columns, email reminders") → no warning (strong)
+- 🔥 **16c.4** With a weak prompt, click **Enhance** → spinner → composer text is replaced with a sharper version; violet "Prompt enhanced · Undo" chip appears
+- **16c.5** Click **Undo** → original text restored, chip disappears
+- **16c.6** After enhancing, edit the textarea → Undo chip clears
+- **16c.7** Click the **dismiss (✕)** on the hint → orange warning hides until you type fresh text
+- **16c.8** The persistent ✨ button in composer actions also tints orange + pulses when weak; works even after dismissing the pill
+- **16c.9** Warning is **advisory only** — you can always Send a weak prompt as-is (never blocked)
+- **16c.10** Enhance an already-strong prompt → toast "Prompt already looks good" (no wasted change)
+
+---
+
 ## 16b. Free Credit Grant + Usage Dashboard + GitHub Import (Round 6)
 
 ### Free-tier credit grant (R6-1)
