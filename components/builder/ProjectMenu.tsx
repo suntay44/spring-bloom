@@ -4,7 +4,7 @@ import { useState, type ComponentType } from "react";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, FileText, GitFork, Gift, Globe2, HelpCircle, KeyRound, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUpRight, BarChart3, Cloud, Code2, CreditCard, Download, FileText, GitFork, Gift, Globe2, HelpCircle, KeyRound, Loader2, Pin, Search, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 export type BuilderTab = "Preview" | "Files" | "Diff" | "Review" | "Security" | "Analytics" | "Integrations" | "Auth" | "SEO" | "Tests";
@@ -114,6 +114,17 @@ export function ProjectMenu({ user, projectId }: { user: ProjectMenuUser; projec
           {forking ? <Loader2 className="animate-spin" size={16} /> : <GitFork size={16} />}
           <span>{forking ? "Forking…" : "Fork project"}</span>
         </button>
+      ) : null}
+      {projectId ? (
+        <a
+          className="menu-row"
+          href={`/api/projects/${projectId}/export`}
+          download
+          title="Download a tar.gz of your project (no vendor lock-in)"
+        >
+          <Download size={16} />
+          <span>Export project (.tar.gz)</span>
+        </a>
       ) : null}
       <div className="menu-section">
         {MENU_ITEMS.map((item) => {

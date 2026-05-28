@@ -10,7 +10,9 @@
     "typecheck": "rm -rf .next/types .next/dev/types && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:migrate": "tsx scripts/apply-migrations.ts",
+    "db:migrate:dry": "tsx scripts/apply-migrations.ts --dry"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.79",
@@ -22,6 +24,9 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.38.8",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.86.0",
     "@upstash/ratelimit": "^2.0.8",
@@ -49,6 +54,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.1.7",
     "tailwindcss": "^4.1.18",
+    "tsx": "^4.22.3",
     "typescript": "^5.9.3",
     "vitest": "^4.1.7"
   },

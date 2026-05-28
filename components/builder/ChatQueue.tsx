@@ -19,6 +19,14 @@ import {
   ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, GripVertical, MoreVertical,
   Pencil, Play, RotateCw, Trash2, X,
 } from "lucide-react"
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 export interface QueueItem {
   id:   string
@@ -32,6 +40,7 @@ interface ChatQueueProps {
   onEdit:          (id: string, newText: string) => void
   onMoveUp:        (id: string) => void
   onMoveDown:      (id: string) => void
+  onReorder:       (newIds: string[]) => void
   onClear:         () => void
   /** Play-now: pop the head NOW (interrupting current?) — caller decides. */
   onPlayNow:       () => void
@@ -40,10 +49,27 @@ interface ChatQueueProps {
 }
 
 export function ChatQueue({
-  items, onRemove, onEdit, onMoveUp, onMoveDown, onClear, onPlayNow, onRepeat,
+  items, onRemove, onEdit, onMoveUp, onMoveDown, onReorder, onClear, onPlayNow, onRepeat,
 }: ChatQueueProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const oldIndex = items.findIndex((i) => i.id === active.id)
+    const newIndex = items.findIndex((i) => i.id === over.id)
+    if (oldIndex < 0 || newIndex < 0) return
+    const next = [...items]
+    const [moved] = next.splice(oldIndex, 1)
+    if (moved) next.splice(newIndex, 0, moved)
+    onReorder(next.map((i) => i.id))
+  }
 
   if (items.length === 0) return null
 
@@ -84,24 +110,28 @@ export function ChatQueue({
 
       {/* List */}
       {!collapsed && (
-        <ul className="max-h-44 overflow-y-auto">
-          {items.map((item, idx) => (
-            <QueueRow
-              key={item.id}
-              item={item}
-              isFirst={idx === 0}
-              isLast={idx === items.length - 1}
-              editing={editingId === item.id}
-              onStartEdit={() => setEditingId(item.id)}
-              onCancelEdit={() => setEditingId(null)}
-              onSaveEdit={(newText) => { onEdit(item.id, newText); setEditingId(null) }}
-              onRemove={() => onRemove(item.id)}
-              onMoveUp={() => onMoveUp(item.id)}
-              onMoveDown={() => onMoveDown(item.id)}
-              onRepeat={() => onRepeat(item.id)}
-            />
-          ))}
-        </ul>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            <ul className="max-h-44 overflow-y-auto">
+              {items.map((item, idx) => (
+                <QueueRow
+                  key={item.id}
+                  item={item}
+                  isFirst={idx === 0}
+                  isLast={idx === items.length - 1}
+                  editing={editingId === item.id}
+                  onStartEdit={() => setEditingId(item.id)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onSaveEdit={(newText) => { onEdit(item.id, newText); setEditingId(null) }}
+                  onRemove={() => onRemove(item.id)}
+                  onMoveUp={() => onMoveUp(item.id)}
+                  onMoveDown={() => onMoveDown(item.id)}
+                  onRepeat={() => onRepeat(item.id)}
+                />
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   )
@@ -129,6 +159,14 @@ function QueueRow({
   const [draft, setDraft]       = useState(item.text)
   const menuRef = useRef<HTMLDivElement | null>(null)
 
+  // R5-5: drag-reorder via @dnd-kit
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
+  const dragStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
   // Close menu on outside click
   useEffect(() => {
     if (!menuOpen) return
@@ -149,7 +187,7 @@ function QueueRow({
 
   if (editing) {
     return (
-      <li className="px-2 py-2 border-b border-zinc-800/60 last:border-0 bg-violet-500/5">
+      <li ref={setNodeRef} style={dragStyle} className="px-2 py-2 border-b border-zinc-800/60 last:border-0 bg-violet-500/5">
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -169,8 +207,16 @@ function QueueRow({
   }
 
   return (
-    <li className="flex items-center gap-1.5 px-2 py-1.5 border-b border-zinc-800/60 last:border-0 hover:bg-white/[0.02] group">
-      <GripVertical size={11} className="text-zinc-700 group-hover:text-zinc-500 shrink-0 cursor-grab" />
+    <li ref={setNodeRef} style={dragStyle} className="flex items-center gap-1.5 px-2 py-1.5 border-b border-zinc-800/60 last:border-0 hover:bg-white/[0.02] group">
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="text-zinc-700 group-hover:text-zinc-500 shrink-0 cursor-grab active:cursor-grabbing p-0.5"
+        aria-label="Drag to reorder"
+      >
+        <GripVertical size={11} />
+      </button>
       <span className="flex-1 min-w-0 text-[11.5px] text-zinc-300 truncate">{item.text}</span>
       <div className="relative shrink-0" ref={menuRef}>
         <button type="button" onClick={() => setMenuOpen((m) => !m)}

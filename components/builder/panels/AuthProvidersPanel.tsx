@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { toast } from "@/lib/toast"
 import { AuthScaffoldSection } from "@/components/builder/AuthScaffoldSection"
+import { JwtHookEditor } from "@/components/builder/JwtHookEditor"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,9 @@ export function AuthProvidersPanel({ projectId }: AuthProvidersPanelProps) {
 
       {/* B1: code-scaffold section — always visible (not gated on PAT) */}
       <AuthScaffoldSection projectId={projectId} />
+
+      {/* R5-4: JWT custom-claims hook editor (live against user's Supabase) */}
+      <JwtHookEditor projectId={projectId} />
 
       {loading ? (
         <div className="auth-providers-loading">

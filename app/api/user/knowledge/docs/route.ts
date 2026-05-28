@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { chunkText } from '@/lib/knowledge/chunker'
+import { embedBatch, vectorLiteral } from '@/lib/knowledge/embeddings'
 
 const MAX_DOC_BYTES = 1_000_000  // 1 MB raw text — anything larger should be RAG'd elsewhere
 
@@ -72,18 +73,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: docErr?.message ?? 'Insert failed' }, { status: 500 })
   }
 
-  // Chunk + insert chunks
+  // Chunk + embed + insert chunks
   const chunks = chunkText(content)
+  let embeddedCount = 0
   if (chunks.length > 0) {
-    const rows = chunks.map((c) => ({
-      doc_id:      (doc as { id: string }).id,
-      user_id:     user.id,
-      project_id:  body.project_id ?? null,
-      chunk_index: c.chunk_index,
-      chunk_text:  c.chunk_text,
-      char_start:  c.char_start,
-      char_end:    c.char_end,
-    }))
+    // R5-2: embed in parallel, gracefully degrade to no-embedding if it fails
+    const embeddings = await embedBatch(chunks.map((c) => c.chunk_text))
+    embeddedCount = embeddings.filter((e) => e !== null).length
+
+    const rows = chunks.map((c, i) => {
+      const emb = embeddings[i]
+      return {
+        doc_id:      (doc as { id: string }).id,
+        user_id:     user.id,
+        project_id:  body.project_id ?? null,
+        chunk_index: c.chunk_index,
+        chunk_text:  c.chunk_text,
+        char_start:  c.char_start,
+        char_end:    c.char_end,
+        embedding:   emb ? vectorLiteral(emb.vector) : null,
+      }
+    })
     // Batch insert (Postgres handles thousands; doc size already capped)
     const { error: chunkErr } = await supabase.from('knowledge_doc_chunks').insert(rows)
     if (chunkErr) {
@@ -98,5 +108,9 @@ export async function POST(req: Request) {
     .update({ indexed_at: new Date().toISOString() })
     .eq('id', (doc as { id: string }).id)
 
-  return NextResponse.json({ doc_id: (doc as { id: string }).id, chunk_count: chunks.length })
+  return NextResponse.json({
+    doc_id:        (doc as { id: string }).id,
+    chunk_count:   chunks.length,
+    embedded_count: embeddedCount,
+  })
 }

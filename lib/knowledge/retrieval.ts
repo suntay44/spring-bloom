@@ -1,15 +1,21 @@
 /**
- * R4-5: RAG-lite retrieval.
+ * RAG retrieval.
  *
  * Given a user prompt + project_id, returns the top-K matching chunks from
- * knowledge_doc_chunks. Today this is ILIKE-based (trigram-indexed if pg_trgm
- * is enabled). Tomorrow this becomes pgvector cosine similarity — the API
- * surface stays the same.
+ * knowledge_doc_chunks.
+ *
+ * R5-2: prefers pgvector cosine similarity when the query embeds successfully.
+ * Falls back to ILIKE keyword matching when:
+ *   - OPENAI_API_KEY is missing
+ *   - The query is too short to be meaningful semantically
+ *   - The OpenAI embed call errors out
  *
  * Caller (the chat route) decides whether to inject results.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { embed, vectorLiteral } from './embeddings'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export interface RetrievedChunk {
   doc_id:       string
@@ -59,6 +65,13 @@ export async function retrieveChunks(input: RetrieveInput): Promise<RetrievedChu
   const topK = input.topK ?? 4
   const maxChars = input.maxChars ?? 4000
 
+  // R5-2: try vector search first — semantic similarity beats keyword matching.
+  const vectorResults = await retrieveVector(input, topK)
+  if (vectorResults.length > 0) {
+    return budgetTrim(vectorResults, topK, maxChars)
+  }
+
+  // Fallback: ILIKE keyword search.
   const keywords = extractKeywords(input.query)
   if (keywords.length === 0) return []
 
@@ -112,6 +125,56 @@ export async function retrieveChunks(input: RetrieveInput): Promise<RetrievedChu
     const { score: _unused, ...rest } = s
     void _unused
     out.push(rest)
+    if (out.length >= topK) break
+  }
+  return out
+}
+
+// ─── Vector search (R5-2) ───────────────────────────────────────────────────
+
+async function retrieveVector(input: RetrieveInput, topK: number): Promise<RetrievedChunk[]> {
+  const embedded = await embed(input.query)
+  if (!embedded) return []
+
+  // pgvector's `<=>` operator returns cosine distance (0 = identical, 2 = opposite).
+  // We can't easily express `<=>` through PostgREST's filter DSL, so route this
+  // through a small RPC. The RPC is defined inline below via the runner — for
+  // now we use the admin client + raw RPC call.
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin.rpc('match_knowledge_chunks', {
+      query_embedding: vectorLiteral(embedded.vector),
+      match_user_id:   input.userId,
+      match_project_id: input.projectId,
+      match_count:     topK * 2,
+    })
+    if (error || !Array.isArray(data)) return []
+
+    type Row = {
+      doc_id: string; chunk_text: string; char_start: number; char_end: number
+      filename: string | null; source_url: string | null; similarity: number
+    }
+    return (data as Row[]).map((r) => ({
+      doc_id:     r.doc_id,
+      chunk_text: r.chunk_text,
+      filename:   r.filename,
+      source_url: r.source_url,
+      char_start: r.char_start,
+      char_end:   r.char_end,
+    }))
+  } catch (err) {
+    console.warn('[retrieval] vector search failed, falling back to ILIKE:', err instanceof Error ? err.message : err)
+    return []
+  }
+}
+
+function budgetTrim(chunks: RetrievedChunk[], topK: number, maxChars: number): RetrievedChunk[] {
+  const out: RetrievedChunk[] = []
+  let used = 0
+  for (const c of chunks) {
+    if (used + c.chunk_text.length > maxChars) continue
+    used += c.chunk_text.length
+    out.push(c)
     if (out.length >= topK) break
   }
   return out

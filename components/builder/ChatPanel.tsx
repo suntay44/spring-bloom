@@ -293,6 +293,12 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
     })
   }
   function queueClear() { setQueue([]) }
+  function queueReorder(newIds: string[]) {
+    setQueue((q) => {
+      const byId = new Map(q.map((x) => [x.id, x] as const));
+      return newIds.map((id) => byId.get(id)).filter((x): x is QueueItem => !!x);
+    });
+  }
   function queueRepeat(id: string) {
     setQueue((q) => {
       const item = q.find((x) => x.id === id);
@@ -645,6 +651,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         onEdit={queueEdit}
         onMoveUp={(id) => queueMove(id, -1)}
         onMoveDown={(id) => queueMove(id, 1)}
+        onReorder={queueReorder}
         onClear={queueClear}
         onPlayNow={queuePlayNow}
         onRepeat={queueRepeat}
