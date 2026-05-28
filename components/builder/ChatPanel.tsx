@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useChat } from "@ai-sdk/react";
-import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, X, Zap } from "lucide-react";
+import { ChevronDown, FileText, Loader2, Mic, Paintbrush, Paperclip, Sparkles, Undo2, X, Zap } from "lucide-react";
 import { MessageItem } from "@/components/builder/MessageItem";
 import { ScopingQuestionsCard } from "@/components/builder/ScopingQuestionsCard";
 import { ModeToggle } from "@/components/builder/ModeToggle";
@@ -12,6 +12,7 @@ import { ChatQueue, type QueueItem } from "@/components/builder/ChatQueue";
 import type { BuilderMode } from "@/lib/ai/model-router";
 import { parseArtifacts } from "@/lib/ai/artifact-parser";
 import { shouldAskQuestions } from "@/lib/ai/ambiguity-detector";
+import { scorePrompt } from "@/lib/ai/prompt-quality";
 import type { ScopingQuestion } from "@/lib/mock/messages";
 import { estimateCredits } from "@/lib/ai/credit-estimator";
 import { runArtifactActions } from "@/lib/fly/action-runner";
@@ -72,6 +73,10 @@ function classifyKind(mime: string, filename: string): AttachmentKind {
 export function ChatPanel({ projectId, machineId, initialMessages = [], onTabChange, onToolsOpen, onVisualEditsToggle, visualEdits }: ChatPanelProps) {
   const [buildMenuOpen, setBuildMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
+  // R7: prompt quality + enhance state
+  const [enhancing, setEnhancing] = useState(false);
+  const [preEnhanceValue, setPreEnhanceValue] = useState<string | null>(null); // for Undo
+  const [enhanceDismissed, setEnhanceDismissed] = useState(false);
   const [mode, setMode] = useState<BuilderMode>("agent");
   const [deepThink, setDeepThink] = useState(false);
   // G1: tracks plans for plan-mode messages so MessageItem can render PlanCard.
@@ -156,6 +161,46 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
   const isStreaming = status === "streaming" || status === "submitted";
   const selectedModel = models.find((model) => model.model_id === selectedModelId);
   const creditEstimate = estimateCredits(inputValue, selectedModelId, selectedModel?.credits_per_1m_output ?? 303);
+
+  // R7: prompt quality — recomputed as the user types (cheap, client-side).
+  const promptQuality = useMemo(() => scorePrompt(inputValue), [inputValue]);
+  // Show the orange "weak" hint only for a genuinely weak, non-slash, first-line prompt
+  // that the user hasn't dismissed, and only while not busy.
+  const showWeakHint =
+    promptQuality.level === 'weak' &&
+    !inputValue.startsWith('/') &&
+    !enhanceDismissed &&
+    !isStreaming && !running && planningState === 'idle';
+
+  async function handleEnhancePrompt() {
+    const original = inputValue.trim();
+    if (!original || enhancing) return;
+    setEnhancing(true);
+    try {
+      const res = await fetch('/api/enhance-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: original }),
+      });
+      const data = await res.json() as { enhanced?: string; unchanged?: boolean; error?: string };
+      if (!res.ok || !data.enhanced) { toast.error(data.error ?? 'Could not enhance'); return; }
+      if (data.unchanged) { toast('Prompt already looks good'); return; }
+      setPreEnhanceValue(original);   // enable Undo
+      setInputValue(data.enhanced);
+      setEnhanceDismissed(true);      // hide the weak hint after enhancing
+    } catch {
+      toast.error('Connection error');
+    } finally {
+      setEnhancing(false);
+    }
+  }
+
+  function handleUndoEnhance() {
+    if (preEnhanceValue === null) return;
+    setInputValue(preEnhanceValue);
+    setPreEnhanceValue(null);
+    setEnhanceDismissed(false);
+  }
 
   useEffect(() => {
     async function loadModels() {
@@ -657,7 +702,7 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
         onRepeat={queueRepeat}
       />
       <div
-        className={`agent-composer focus-within:ring-1 focus-within:ring-[var(--accent-cyan)]/30 ${isDragOver ? 'ring-2 ring-purple-400/60' : ''} ${isStreaming ? 'animate-pulse [box-shadow:0_0_0_1px_var(--accent-cyan)]' : ''} ${planningState !== 'idle' ? 'pointer-events-none opacity-40' : ''}`}
+        className={`agent-composer focus-within:ring-1 focus-within:ring-[var(--accent-cyan)]/30 ${isDragOver ? 'ring-2 ring-purple-400/60' : ''} ${isStreaming ? 'animate-pulse [box-shadow:0_0_0_1px_var(--accent-cyan)]' : ''} ${showWeakHint ? 'composer--weak' : ''} ${planningState !== 'idle' ? 'pointer-events-none opacity-40' : ''}`}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -725,9 +770,43 @@ export function ChatPanel({ projectId, machineId, initialMessages = [], onTabCha
             onClose={() => { /* user keeps typing, will dismiss when slash gone */ }}
           />
         )}
-        <textarea onChange={(event) => setInputValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }} placeholder={isStreaming || running || queue.length > 0 ? "Queue follow-up..." : "Ask Wild Cupcake..."} value={inputValue} />
+        {/* R7: weak-prompt hint — orange, animated, advisory only */}
+        {showWeakHint && (
+          <div className="composer-weak-hint">
+            <span className="composer-weak-hint-text">
+              <Sparkles size={12} /> This prompt is a bit vague — enhancing it gets a better result.
+            </span>
+            <div className="composer-weak-hint-actions">
+              <button type="button" className="composer-enhance-btn" onClick={() => void handleEnhancePrompt()} disabled={enhancing}>
+                {enhancing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                {enhancing ? "Enhancing…" : "Enhance"}
+              </button>
+              <button type="button" className="composer-weak-hint-dismiss" onClick={() => setEnhanceDismissed(true)} aria-label="Dismiss">
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        )}
+        {/* R7: Undo chip — shown briefly after an enhance */}
+        {preEnhanceValue !== null && (
+          <div className="composer-undo-chip">
+            <Sparkles size={11} /> Prompt enhanced
+            <button type="button" onClick={handleUndoEnhance} className="composer-undo-btn"><Undo2 size={11} /> Undo</button>
+          </div>
+        )}
+        <textarea
+          onChange={(event) => {
+            setInputValue(event.target.value);
+            // editing clears the post-enhance Undo + re-enables the hint for fresh text
+            if (preEnhanceValue !== null) setPreEnhanceValue(null);
+            if (enhanceDismissed) setEnhanceDismissed(false);
+          }}
+          onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void handleSend(); } }}
+          placeholder={isStreaming || running || queue.length > 0 ? "Queue follow-up..." : "Ask Wild Cupcake..."}
+          value={inputValue}
+        />
         <div className="composer-actions">
-          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><ModeToggle mode={mode} onChange={setMode} deepThink={deepThink} onDeepThinkChange={setDeepThink} disabled={isStreaming || running} /><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
+          <div className="flex items-center gap-2"><button aria-label="Attach file" className="circle-btn" onClick={() => fileInputRef.current?.click()} type="button"><Paperclip size={15} /></button><button aria-label="Enhance prompt" title="Enhance prompt" className={`circle-btn ${showWeakHint ? 'circle-btn--warn' : ''}`} disabled={!inputValue.trim() || enhancing || isStreaming || running} onClick={() => void handleEnhancePrompt()} type="button">{enhancing ? <Loader2 className="animate-spin" size={15} /> : <Sparkles size={15} />}</button><ModeToggle mode={mode} onChange={setMode} deepThink={deepThink} onDeepThinkChange={setDeepThink} disabled={isStreaming || running} /><button className={`chip-btn ${visualEdits ? "active" : ""}`} onClick={onVisualEditsToggle} type="button"><Paintbrush size={15} /> Visual edits</button></div>
           <div className="relative flex items-center gap-2">
             <button className="chip-btn" onClick={() => setBuildMenuOpen((current) => !current)} type="button">Build <ChevronDown size={14} /></button>
             {buildMenuOpen ? (
