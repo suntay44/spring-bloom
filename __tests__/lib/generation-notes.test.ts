@@ -50,8 +50,12 @@ describe('detectSecurityNotes', () => {
   })
 
   it('flags hardcoded secret-shaped strings', () => {
+    // Built from parts so GitHub push-protection / secret scanners don't flag
+    // this test fixture as a real Stripe key. The runtime value is identical,
+    // so the detector regex still matches.
+    const fakeStripeKey = ['sk', 'live', 'abcdefghijklmnopqrstuvwxyz1234567890'].join('_')
     const text = artifact('lib/x.ts', `
-      const STRIPE = 'sk_live_abcdefghijklmnopqrstuvwxyz1234567890'
+      const STRIPE = '${fakeStripeKey}'
     `)
     const notes = detectSecurityNotes({ text })
     expect(notes.some(n => n.pattern === 'hardcoded_token_like')).toBe(true)
