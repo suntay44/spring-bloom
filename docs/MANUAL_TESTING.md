@@ -333,6 +333,32 @@ You've already used this for setup, but verify:
 
 ---
 
+## 16b. Free Credit Grant + Usage Dashboard + GitHub Import (Round 6)
+
+### Free-tier credit grant (R6-1)
+- 🔥 **16b.1** New user signs up → `select * from credit_transactions where user_id='<new>' and type='bonus'` → one row, amount 20, `metadata.reason='signup_grant'`
+- **16b.2** Re-trigger user-created webhook for same user → NO second grant (idempotent)
+- **16b.3** `update platform_settings set value='50' where key='free_signup_credits'` → next new user gets 50
+- **16b.4** Set value `'0'` → next new user gets no grant
+
+### Usage dashboard (R6-2) — `/settings/usage`
+- 🔥 **16b.5** Visit `/settings/usage` → 4 stat cards (Balance, This month, Runs 30d, Cache hit %)
+- **16b.6** "Prompt cache savings" callout shows read/creation token counts
+- **16b.7** 30-day sparkline renders; hover bar → date + credits tooltip
+- **16b.8** By-model table: each model with runs / tokens / credits
+- **16b.9** Transaction feed with typed badges (spend/bonus/purchase)
+- **16b.10** Balance reconciles with `select sum(amount) from credit_transactions where user_id=me`
+
+### GitHub snippet import (R6-3)
+- 🔥 **16b.11** `/settings/snippets` → "Import from GitHub" → paste a public repo URL with an AGENTS.md → Import → snippet(s) created, tagged `imported`+`github`
+- **16b.12** Raw file URL `raw.githubusercontent.com/o/r/main/AGENTS.md` → single snippet
+- **16b.13** Blob URL `github.com/o/r/blob/main/.cursorrules` → imported
+- **16b.14** Repo with NO known files → "No AGENTS.md / CLAUDE.md / .cursorrules found"
+- **16b.15** Import same repo twice → triggers auto-suffixed (`-2`), no error
+- **16b.16** Non-GitHub URL → "Not a recognized GitHub URL"
+
+---
+
 ## 17. Cost Verification
 
 | Action | Cost | Verification |
